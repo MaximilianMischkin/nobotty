@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nobotty
 // @namespace    https://github.com/MaximilianMischkin/nobotty
-// @version      0.1.4
+// @version      0.1.5
 // @description  Spot likely bots, scams and sales pitches on Reddit. Runs locally.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -9,16 +9,16 @@
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
-(function(){var st=document.createElement('style');st.textContent="/* Nobotty: styles live on the comment host element so they work with Reddit's shadow DOM. */\n[data-nobotty]{position:relative}\n[data-nobotty=\"medium\"],[data-nobotty=\"high\"]{box-shadow:inset 3px 0 0 #e8693f}\n[data-nobotty=\"high\"]::before,[data-nobotty=\"medium\"]::before{\n  content:attr(data-nobotty-label);display:block;font:600 12px/1.4 system-ui,-apple-system,sans-serif;\n  color:#e8693f;padding:4px 8px;margin:2px 0 4px 8px;border-radius:999px;background:rgba(232,105,63,.12);width:max-content;max-width:calc(100% - 16px);\n  white-space:normal;cursor:pointer}\n[data-nobotty=\"high\"]:not([data-nobotty-open]){display:block;max-height:30px;overflow:hidden;opacity:.7}\n[data-nobotty=\"medium\"]:not([data-nobotty-open]){opacity:.85}\n@media (prefers-reduced-motion:no-preference){[data-nobotty]{transition:opacity 160ms cubic-bezier(.23,1,.32,1)}}\n";document.head.appendChild(st);})();
+(function(){var st=document.createElement('style');st.textContent="/* Nobotty: styles live on the comment host element so they work with Reddit's shadow DOM. */\n[data-nobotty]{position:relative}\n[data-nobotty=\"medium\"]{box-shadow:inset 2px 0 0 rgba(217,102,63,.5);opacity:.85}\n[data-nobotty=\"high\"]{box-shadow:inset 2px 0 0 #d9663f}\n[data-nobotty=\"high\"]::before,[data-nobotty-tag]::before{\n  content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;\n  color:#d9663f;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}\n[data-nobotty=\"high\"]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}\n@media (prefers-reduced-motion:no-preference){[data-nobotty]{transition:opacity 160ms cubic-bezier(.23,1,.32,1)}}\n";document.head.appendChild(st);})();
 /* Nobotty content script. Local only: reads the page and public account info, shows hints. */
 (function () {
   'use strict';
   var DAY = 86400000, TTL = 7 * DAY;
-  var DEFAULTS = { enabled: true, collapseHigh: true, showMedium: true, trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true, showStatus: true };
+  var DEFAULTS = { enabled: true, collapseHigh: true, showMedium: true, trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true, showStatus: true, labelMedium: false };
   var cfg = Object.assign({}, DEFAULTS);
   var cache = {};              // name -> {t, created, karma, err}
   var queue = [], queued = {}; // fetch queue (1 request per ~1.1 s)
-  var running = false, backoffUntil = 0;
+  var backoffUntil = 0;
   /* Account lookup. In an extension the background script does the request (works around page CSP and Firefox
      cross-compartment errors). As a userscript, or in tests, it falls back to a same-origin fetch. */
   var rt = (typeof browser !== 'undefined' && browser.runtime && browser.runtime.id) ? browser.runtime
@@ -82,9 +82,9 @@
   function textSignals(text) {
     var pts = 0, why = [], low = text.toLowerCase();
     var dashes = (text.match(/—/g) || []).length;
-    if (dashes >= 3) { pts += 1; why.push(dashes + ' em dashes'); }
+    if (dashes >= 3) { pts += 1; why.push('many em dashes'); }
     var hits = LLM_PHRASES.filter(function (p) { return low.indexOf(p) !== -1; });
-    if (hits.length >= 1) { pts += 1; why.push('stock phrase "' + hits[0] + '"'); }
+    if (hits.length >= 1) { pts += 1; why.push('stock phrase'); }
     if (pts > 2) pts = 2;
     return { pts: pts, why: why };
   }
@@ -92,13 +92,13 @@
     var pts = 0, why = [];
     if (info && !info.err) {
       var days = Math.floor((Date.now() - info.created * 1000) / DAY);
-      if (days < 7) { pts += 3; why.push('account ' + days + ' days old'); }
-      else if (days < 30) { pts += 2; why.push('account ' + days + ' days old'); }
-      else if (days < 90) { pts += 1; why.push('account ' + days + ' days old'); }
+      if (days < 7) { pts += 3; why.push(days + 'd old'); }
+      else if (days < 30) { pts += 2; why.push(days + 'd old'); }
+      else if (days < 90) { pts += 1; why.push(days + 'd old'); }
       if (info.karma < 50) { pts += 2; why.push(info.karma + ' karma'); }
       else if (info.karma < 200) { pts += 1; why.push(info.karma + ' karma'); }
     }
-    if (/^[A-Z][a-z]+[-_][A-Za-z]+[-_]?\d{2,4}$/.test(name)) { pts += 1; why.push('auto-style username'); }
+    if (/^[A-Z][a-z]+[-_][A-Za-z]+[-_]?\d{2,4}$/.test(name)) { pts += 1; why.push('auto username'); }
     return { pts: pts, why: why };
   }
   function level(pts) { return pts >= 5 ? 'high' : pts >= 3 ? 'medium' : 'none'; }
@@ -121,36 +121,43 @@
   function saveCache() { clearTimeout(saveTimer); saveTimer = setTimeout(function () {
     var now = Date.now(); Object.keys(cache).forEach(function (k) { if (now - cache[k].t > TTL) delete cache[k]; });
     sSet({ acct: cache }); }, 1500); }
-  function want(name) {
+  var prio = {}, inflight = 0, MAXC = 4, SPACING = 120, lastStart = 0, pumpTimer = null;
+  function want(name, el) {
     var c = cache[name]; if (c && Date.now() - c.t < (c.err ? 60000 : TTL)) return;
+    if (el) { var top = el.getBoundingClientRect().top, vh = window.innerHeight || 800; var d = top < 0 ? Math.abs(top) + vh : (top > vh ? top : 0); if (prio[name] === undefined || d < prio[name]) prio[name] = d; }
     if (queued[name]) return; queued[name] = 1; queue.push(name); pump();
   }
-  function pump() {
-    if (running || !queue.length) return; running = true;
-    var wait = Math.max(0, backoffUntil - Date.now());
-    setTimeout(function () {
-      var name = queue.shift(); delete queued[name];
-      lookup(name)
-        .then(function (r) {
-          if (r.status === 429) { backoffUntil = Date.now() + 60000; queue.unshift(name); queued[name] = 1; throw new Error('rate'); }
-          if (!r.ok) { cache[name] = { t: Date.now(), err: r.status || r.error || 'failed' }; return null; }
-          return r.data;
-        })
-        .then(function (j) {
-          if (j && j.data) cache[name] = { t: Date.now(), created: j.data.created_utc, karma: (j.data.total_karma != null ? j.data.total_karma : (j.data.link_karma || 0) + (j.data.comment_karma || 0)) };
-          saveCache(); evaluate();
-        })
-        .catch(function (e) {
-          if (e && e.message === 'rate') return;
-          var msg = e && e.name === 'AbortError' ? 'timeout' : String((e && e.message) || e).slice(0, 60);
-          cache[name] = { t: Date.now(), err: msg };
-          try { console.warn('[Nobotty] lookup failed for ' + name + ':', e); } catch (x) {}
-          evaluate();
-        })
-        .then(function () { running = false; drawChip(); setTimeout(pump, 1100); });
-    }, wait);
+  function nextName() {
+    var bi = 0, bp = Infinity;
+    for (var i = 0; i < queue.length; i++) { var p = prio[queue[i]]; if (p === undefined) p = 1e9; if (p < bp) { bp = p; bi = i; } }
+    return queue.splice(bi, 1)[0];
   }
-
+  function pump() {
+    if (inflight >= MAXC || !queue.length) return;
+    var now = Date.now(), wait = Math.max(0, backoffUntil - now, lastStart + SPACING - now);
+    if (wait > 0) { if (!pumpTimer) pumpTimer = setTimeout(function () { pumpTimer = null; pump(); }, wait); return; }
+    var name = nextName(); delete queued[name]; inflight++; lastStart = Date.now();
+    lookup(name)
+      .then(function (r) {
+        if (r.rl && r.rl.remaining != null && r.rl.remaining < 4) backoffUntil = Date.now() + Math.min(70, (r.rl.reset || 10)) * 1000;
+        if (r.status === 429) { backoffUntil = Date.now() + 30000; queue.unshift(name); queued[name] = 1; throw new Error('rate'); }
+        if (!r.ok) { cache[name] = { t: Date.now(), err: r.status || r.error || 'failed' }; return null; }
+        return r.data;
+      })
+      .then(function (j) {
+        if (j && j.data) cache[name] = { t: Date.now(), created: j.data.created_utc, karma: (j.data.total_karma != null ? j.data.total_karma : (j.data.link_karma || 0) + (j.data.comment_karma || 0)) };
+        saveCache(); schedule(150);
+      })
+      .catch(function (e) {
+        if (e && e.message === 'rate') return;
+        var msg = e && e.name === 'AbortError' ? 'timeout' : String((e && e.message) || e).slice(0, 60);
+        cache[name] = { t: Date.now(), err: msg };
+        try { console.warn('[Nobotty] lookup failed for ' + name + ':', e); } catch (x) {}
+        schedule(150);
+      })
+      .then(function () { inflight--; drawChip(); pump(); });
+    pump();
+  }
 
   /* ---- direct messages: hide scam/bot messages and (optionally) sales pitches ---- */
   /* Old inbox: div.thing.message. New chat markup changes often, so the selectors live in one place. */
@@ -190,33 +197,40 @@
       var text = (el.innerText || el.textContent || '').trim(); if (text.length < 4) return;
       var name = dmAuthor(el) || '';
       if (name && cfg.trusted.indexOf(name.toLowerCase()) !== -1) { clear(el); el.removeAttribute('data-nobotty-dm'); return; }
-      var info = name ? cache[name] : null; if (name && !info) want(name);
+      var info = name ? cache[name] : null; if (name && !info) want(name, el);
       var k = dmKind(text, info, name);
       var hide = k && ((k.kind === 'seller' && cfg.dmBlockSellers) || ((k.kind === 'scam' || k.kind === 'bot') && cfg.dmBlockBots));
       if (!hide) { if (el.hasAttribute('data-nobotty-dm')) { clear(el); el.removeAttribute('data-nobotty-dm'); } return; }
       stats.dms++;
       el.setAttribute('data-nobotty-dm', k.kind);
       el.setAttribute('data-nobotty', 'high');
-      el.setAttribute('data-nobotty-label', 'Nobotty hid a message (' + k.why + (name ? ' from u/' + name : '') + '). Click to ' + (el.hasAttribute('data-nobotty-open') ? 'hide' : 'show') + '.');
+      el.setAttribute('data-nobotty-label', 'Hidden ' + k.why + (name ? ' \u00b7 u/' + name : ''));
     });
   }
 
 
   /* ---- status chip: shows that Nobotty runs and what it found (helps when nothing is marked) ---- */
   var stats = { seen: 0, withAuthor: 0, checked: 0, failed: 0, lastErr: '', flagged: 0, dms: 0 };
-  var chip = null; /* defined before use in observer */
+  var chip = null; var idleTimer = null;
   function drawChip() {
     if (!cfg.showStatus || !document.body) { if (chip) chip.style.display = 'none'; return; }
     if (!chip) {
       chip = document.createElement('div');
-      chip.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483000;padding:7px 12px;border-radius:999px;background:#10231a;color:#f4f6ef;font:600 12px/1.3 system-ui,sans-serif;opacity:.8;cursor:pointer;max-width:80vw';
-      chip.title = 'Nobotty status. Click to hide (turn back on in settings).';
+      chip.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483000;padding:4px 10px;border-radius:999px;background:#10231a;color:#f4f6ef;font:500 11px/1.3 system-ui,sans-serif;cursor:pointer;max-width:80vw;transition:opacity 200ms cubic-bezier(.23,1,.32,1)';
+      chip.title = 'Nobotty. Click to hide (turn back on in settings).';
       chip.addEventListener('click', function () { cfg.showStatus = false; sSet({ cfg: cfg }); drawChip(); });
       document.body.appendChild(chip);
     }
     chip.style.display = 'block';
-    var waiting = queue.length + (running ? 1 : 0);
-    var txt = 'Nobotty' + (version ? ' ' + version : '') + ': ' + stats.seen + ' comments, ' + stats.checked + ' accounts checked, ' + stats.flagged + ' flagged' + (stats.dms ? ', ' + stats.dms + ' messages hidden' : '') + (waiting ? ', ' + waiting + ' waiting' : '') + (bgState !== 'ok' && bgState !== 'n/a' ? ' [background: ' + bgState + ']' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
+    var waiting = queue.length + inflight, bad = (bgState !== 'ok' && bgState !== 'n/a');
+    var txt;
+    if (waiting || bad || stats.failed) {
+      txt = 'Nobotty' + (version ? ' ' + version : '') + ': ' + stats.checked + '/' + stats.withAuthor + ' checked, ' + stats.flagged + ' flagged' + (waiting ? ', ' + waiting + ' waiting' : '') + (bad ? ' [background: ' + bgState + ']' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
+      chip.style.opacity = '.85';
+    } else {
+      txt = 'Nobotty \u00b7 ' + stats.flagged + ' flagged' + (stats.dms ? ' \u00b7 ' + stats.dms + ' hidden' : '');
+      clearTimeout(idleTimer); idleTimer = setTimeout(function () { if (chip) chip.style.opacity = '.35'; }, 2500);
+    }
     if (chip.textContent !== txt) chip.textContent = txt;
   }
 
@@ -233,27 +247,28 @@
       stats.withAuthor++;
       var ci = cache[name]; if (ci && !ci.err) stats.checked++; else if (ci && ci.err) { stats.failed++; stats.lastErr = (typeof ci.err === 'number' ? 'HTTP ' + ci.err : ci.err); }
       if (cfg.trusted.indexOf(name.toLowerCase()) !== -1) { clear(el); return; }
-      var info = cache[name]; if (!info) want(name);
+      var info = cache[name]; if (!info) want(name, el);
       var a = accountSignals(info, name), t = textSignals(textOf(el)), pts = a.pts + t.pts, why = a.why.concat(t.why);
-      if (dups[normalize(textOf(el))]) { pts += 3; why.push('same text as another account'); }
+      if (dups[normalize(textOf(el))]) { pts += 3; why.push('copied text'); }
       var lv = level(pts);
       if (lv === 'none' || (lv === 'medium' && !cfg.showMedium)) { clear(el); return; }
       stats.flagged++;
       el.setAttribute('data-nobotty', lv);
-      el.setAttribute('data-nobotty-label', 'Nobotty: ' + lv + ' signals (' + why.join(', ') + '). Click to ' + (el.hasAttribute('data-nobotty-open') ? 'collapse' : 'show') + '.');
-      el.setAttribute('title', 'Signals only, not proof. u/' + name);
+      el.setAttribute('data-nobotty-label', (lv === 'high' ? 'Likely bot' : 'Possible bot') + ' \u00b7 u/' + name + ' \u00b7 ' + why.join(', '));
+      if (lv === 'medium' && cfg.labelMedium) el.setAttribute('data-nobotty-tag', '1'); else el.removeAttribute('data-nobotty-tag');
+      el.setAttribute('title', 'Signals only, not proof. ' + why.join(', '));
       if (lv === 'high' && !cfg.collapseHigh) el.setAttribute('data-nobotty-open', '1');
     });
     afterEval();
   }
   function afterEval() { drawChip(); try { console.log('[Nobotty]', JSON.stringify(stats)); } catch (e) {} }
-  function clear(el) { el.removeAttribute('data-nobotty'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); }
-  function schedule() { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, 400); }
+  function clear(el) { el.removeAttribute('data-nobotty'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); el.removeAttribute('data-nobotty-tag'); }
+  function schedule(ms) { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, typeof ms === 'number' ? ms : 400); }
 
   /* click on the chip toggles the comment open/closed (the chip is a ::before, so use the host) */
   document.addEventListener('click', function (e) {
     var el = e.target && e.target.closest && e.target.closest('[data-nobotty]'); if (!el) return;
-    var r = el.getBoundingClientRect(); if (e.clientY - r.top > 34) return; // only the label strip
+    var r = el.getBoundingClientRect(); if (e.clientY - r.top > 24) return; // only the label strip
     if (el.hasAttribute('data-nobotty-open')) el.removeAttribute('data-nobotty-open'); else el.setAttribute('data-nobotty-open', '1');
     evaluate();
   }, true);
@@ -276,13 +291,13 @@
 
 /* ---- in-page settings (userscript build has no toolbar popup) ---- */
 (function () {
-  var D = { enabled: true, collapseHigh: true, showMedium: true, trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true, showStatus: true };
+  var D = { enabled: true, collapseHigh: true, showMedium: true, trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true, showStatus: true, labelMedium: false };
   function load() { try { return Object.assign({}, D, JSON.parse(localStorage.getItem('nobotty:cfg')) || {}); } catch (e) { return Object.assign({}, D); } }
   var btn = document.createElement('button'); btn.textContent = 'Nobotty'; btn.setAttribute('aria-label', 'Nobotty settings');
   btn.style.cssText = 'position:fixed;left:12px;bottom:48px;z-index:2147483000;padding:8px 14px;border:0;border-radius:999px;background:#10231a;color:#f4f6ef;font:600 13px system-ui,sans-serif;cursor:pointer;opacity:.75';
   var box = document.createElement('div'); box.hidden = true;
   box.style.cssText = 'position:fixed;left:12px;bottom:88px;z-index:2147483000;width:290px;padding:14px;border-radius:16px;background:#f4f6ef;color:#10231a;font:14px/1.4 system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.35)';
-  var rows = [['enabled','Turn on','Check comments and messages'],['collapseHigh','Collapse strong signals','One click on the label opens it'],['showMedium','Mark medium signals','Slightly dimmed, with a label'],['dmFilter','Filter direct messages','Hide scam and bot messages'],['dmBlockBots','Hide bots and scams','Crypto, add-me-on-Telegram, new accounts with links'],['dmBlockSellers','Hide sales pitches too','Turn off to receive offers'],['showStatus','Show status chip','Small badge at the bottom left']];
+  var rows = [['enabled','Turn on','Check comments and messages'],['collapseHigh','Collapse strong signals','One click on the label opens it'],['showMedium','Mark medium signals','Slightly dimmed, with a label'],['dmFilter','Filter direct messages','Hide scam and bot messages'],['dmBlockBots','Hide bots and scams','Crypto, add-me-on-Telegram, new accounts with links'],['dmBlockSellers','Hide sales pitches too','Turn off to receive offers'],['labelMedium','Label medium signals','Off keeps the page tidy'],['showStatus','Show status chip','Small badge at the bottom left']];
   var c = load(), html = '<b style="font-size:16px">Nobotty</b><div style="color:#44584c;font-size:12px;margin:2px 0 8px">Signals, not proof. Runs on your device.</div>';
   rows.forEach(function (r) { html += '<label style="display:flex;gap:8px;padding:6px 0;border-top:1px solid #d5ddcf;cursor:pointer"><input type="checkbox" data-k="' + r[0] + '" style="margin-top:3px"' + (c[r[0]] ? ' checked' : '') + '><span>' + r[1] + '<small style="display:block;color:#5a6d60">' + r[2] + '</small></span></label>'; });
   html += '<div style="margin-top:8px"><b>Trusted accounts</b><small style="display:block;color:#5a6d60">One username per line</small><textarea data-k="trusted" style="width:100%;height:50px;box-sizing:border-box;margin-top:4px;border:1px solid #cdd7c8;border-radius:8px;padding:6px">' + c.trusted.join('\n') + '</textarea></div><button data-save style="margin-top:8px;width:100%;padding:9px;border:0;border-radius:999px;background:#e8693f;color:#10231a;font-weight:600;cursor:pointer">Save</button>';

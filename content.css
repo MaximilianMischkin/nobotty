@@ -1,10 +1,9 @@
 /* Nobotty: styles live on the comment host element so they work with Reddit's shadow DOM. */
 [data-nobotty]{position:relative}
-[data-nobotty="medium"],[data-nobotty="high"]{box-shadow:inset 3px 0 0 #e8693f}
-[data-nobotty="high"]::before,[data-nobotty="medium"]::before{
-  content:attr(data-nobotty-label);display:block;font:600 12px/1.4 system-ui,-apple-system,sans-serif;
-  color:#e8693f;padding:4px 8px;margin:2px 0 4px 8px;border-radius:999px;background:rgba(232,105,63,.12);width:max-content;max-width:calc(100% - 16px);
-  white-space:normal;cursor:pointer}
-[data-nobotty="high"]:not([data-nobotty-open]){display:block;max-height:30px;overflow:hidden;opacity:.7}
-[data-nobotty="medium"]:not([data-nobotty-open]){opacity:.85}
+[data-nobotty="medium"]{box-shadow:inset 2px 0 0 rgba(217,102,63,.5);opacity:.85}
+[data-nobotty="high"]{box-shadow:inset 2px 0 0 #d9663f}
+[data-nobotty="high"]::before,[data-nobotty-tag]::before{
+  content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;
+  color:#d9663f;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+[data-nobotty="high"]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}
 @media (prefers-reduced-motion:no-preference){[data-nobotty]{transition:opacity 160ms cubic-bezier(.23,1,.32,1)}}
