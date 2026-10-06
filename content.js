@@ -184,12 +184,21 @@
     if (thread.id === id && (unknown < 3 || now - thread.at < 30000)) return;
     if (thread.id !== id) thread.ok = false;
     thread.busy = true; thread.id = id; thread.at = now;
-    getJSON('/comments/' + id + '.json?limit=500&depth=12&raw_json=1').then(function (r) {
-      noteNet('thread', r); noteLimit(r && r.rl);
+    /* If the page already carries account ids (old Reddit: data-author-fullname), no thread request is needed. */
+    var fromDom = {}, missing = 0;
+    document.querySelectorAll(SEL).forEach(function (el) {
+      var n = authorOf(el); if (!n || cache[n]) return;
+      var fid = el.getAttribute('data-author-fullname') || el.getAttribute('author-id') || el.getAttribute('authorid');
+      if (fid && /^t2_[a-z0-9]+$/.test(fid)) fromDom[n] = fid; else missing++;
+    });
+    var treeReq = missing ? getJSON('/comments/' + id + '.json?limit=500&depth=12&raw_json=1')
+                          : Promise.resolve({ ok: true, status: 200, dom: fromDom });
+    treeReq.then(function (r) {
+      if (!(r && r.dom)) { noteNet('thread', r); noteLimit(r && r.rl); }
       if (r && r.status === 429) backoffUntil = Date.now() + 60000;
       if (!r || !r.ok) throw new Error('thread ' + ((r && (r.status || r.error)) || 'failed'));
       thread.ok = true;
-      var map = {}; collectAuthors(r.data, map);
+      var map = r.dom || {}; if (!r.dom) collectAuthors(r.data, map);
       var need = Object.keys(map).filter(function (n) { var c = cache[n]; return !c || c.err || Date.now() - c.t > TTL; });
       var ids = need.map(function (n) { return map[n]; }), chunks = [];
       for (var i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));

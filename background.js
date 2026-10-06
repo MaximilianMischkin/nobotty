@@ -1,8 +1,20 @@
 /* Nobotty background: public account info and recent history for a username. Only reddit.com, only valid usernames. */
 function num(v) { var n = parseFloat(v); return isNaN(n) ? null : n; }
 var api = typeof browser !== 'undefined' ? browser : chrome;
+/* Logged-out requests have their own rate limit, separate from the user's logged-in one (which Reddit itself also uses).
+   Try logged-out first; fall back to the logged-in pool when that one is used up or refused. */
+var anonUntil = 0;
 function reddit(path) {
-  return fetch('https://www.reddit.com' + path, { credentials: 'include', headers: { Accept: 'application/json' } }).then(function (r) {
+  if (Date.now() < anonUntil) return one(path, 'include');
+  return one(path, 'omit').then(function (r) {
+    var empty = r.status === 429 || (r.rl && r.rl.remaining != null && r.rl.remaining < 1);
+    if (empty) anonUntil = Date.now() + Math.min(600, (r.rl && r.rl.reset) || 60) * 1000;
+    if (r.ok) { if (empty) r.rl = { remaining: null, reset: null }; return r; }  // the logged-in pool is still there
+    return one(path, 'include').then(function (r2) { return r2.ok || !r.ok ? r2 : r; });
+  });
+}
+function one(path, creds) {
+  return fetch('https://www.reddit.com' + path, { credentials: creds, headers: { Accept: 'application/json' } }).then(function (r) {
     var rl = { remaining: num(r.headers.get('x-ratelimit-remaining')), reset: num(r.headers.get('x-ratelimit-reset')) };
     if (!r.ok) return { ok: false, status: r.status, rl: rl };
     return r.json().then(function (data) { return { ok: true, status: r.status, data: data, rl: rl }; },
