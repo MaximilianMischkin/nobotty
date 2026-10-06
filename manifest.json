@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Botless: bot signals for Reddit",
+  "short_name": "Botless",
+  "version": "0.1.0",
+  "description": "Shows warning signals on likely bot and brand-new accounts in Reddit comments, and collapses them with one click to expand. Everything runs locally.",
+  "icons": {"16":"icons/16.png","32":"icons/32.png","48":"icons/48.png","128":"icons/128.png"},
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.reddit.com/*","https://old.reddit.com/*","https://chat.reddit.com/*"],
+  "content_scripts": [{
+    "matches": ["https://www.reddit.com/*","https://old.reddit.com/*","https://chat.reddit.com/*"],
+    "js": ["content.js"],
+    "css": ["content.css"],
+    "run_at": "document_idle"
+  }],
+  "action": {"default_popup": "popup.html", "default_title": "Botless"}
+}

@@ -1,0 +1,9 @@
+{
+  "name": "botless",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser extension: bot, scam and sales-pitch signals for Reddit comments and DMs.",
+  "license": "MIT",
+  "scripts": { "test": "node tests/test.js && node tests/test2.js" },
+  "devDependencies": { "playwright": "^1.49.0" }
+}
