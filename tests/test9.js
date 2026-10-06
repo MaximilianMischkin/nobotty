@@ -9,7 +9,7 @@ const fs=require('fs'),path=require('path');
  .line{position:absolute;left:8px;top:36px;width:2px;height:44px;background:#444}
  faceplate-img{position:absolute;left:10px;top:0;display:block;width:32px;height:32px;border-radius:50%;background:#c084fc}
  [slot=commentMeta]{margin-left:52px;height:32px;line-height:32px}[slot=comment]{margin-left:52px}</style>
- <shreddit-comment author="x1"><div slot="commentAvatar"><div class="line"></div><faceplate-img></faceplate-img></div><div slot="commentMeta">newbie_one</div><div slot="comment">Interested, please contact me</div></shreddit-comment>`;
+ <shreddit-comment author="x1"><div slot="commentAvatar"><div class="line"></div><faceplate-img></faceplate-img></div><div slot="commentMeta"><a href="/user/newbie_one/">newbie_one</a> <span>3h ago</span></div><div slot="comment">Interested, please contact me</div></shreddit-comment>`;
  await pg.route('https://www.reddit.com/**',r=>r.fulfill({status:200,contentType:'text/html; charset=utf-8',body:html}));
  await pg.goto('https://www.reddit.com/r/x/comments/1/');
  await pg.evaluate(()=>{const now=Math.floor(Date.now()/1000);window.chrome={runtime:{id:'t',getManifest:()=>({version:'t'}),sendMessage:m=>m.type==='nobotty-ping'?Promise.resolve({pong:true}):Promise.resolve({ok:true,status:200,data:{data:{created_utc:now-86400,total_karma:1}},items:[],rl:{remaining:90,reset:60}})}}});
