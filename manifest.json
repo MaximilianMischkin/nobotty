@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Nobotty: bot signals for Reddit",
   "short_name": "Nobotty",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shows warning signals on likely bot and brand-new accounts in Reddit comments, and collapses them with one click to expand. Everything runs locally.",
   "icons": {"16":"icons/16.png","32":"icons/32.png","48":"icons/48.png","128":"icons/128.png"},
   "permissions": ["storage"],

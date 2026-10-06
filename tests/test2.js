@@ -19,6 +19,7 @@ async function run(cfg){
  await pg.waitForTimeout(6500);
  const res=await pg.evaluate(()=>[...document.querySelectorAll('.thing.message')].map(e=>e.getAttribute('data-author')+' => '+(e.getAttribute('data-nobotty-dm')||'shown')));
  console.log(JSON.stringify(cfg).slice(0,110),'\n  ',res.join('\n   '));
+ const chipText=await pg.evaluate(()=>{const c=[...document.querySelectorAll('div')].find(d=>d.textContent.startsWith('Nobotty:')&&d.style.position==='fixed');return c?c.textContent:'NO CHIP'});console.log('  chip:',chipText);
  if(cfg.dmBlockSellers&&cfg.dmFilter)await pg.screenshot({path:'test_dm.png'});
  await b.close();}
 (async()=>{

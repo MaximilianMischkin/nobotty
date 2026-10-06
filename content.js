@@ -2,12 +2,12 @@
 (function () {
   'use strict';
   var DAY = 86400000, TTL = 7 * DAY;
-  var DEFAULTS = { enabled: true, collapseHigh: true, showMedium: true, trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true };
+  var DEFAULTS = { enabled: true, collapseHigh: true, showMedium: true, trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true, showStatus: true };
   var cfg = Object.assign({}, DEFAULTS);
   var cache = {};              // name -> {t, created, karma, err}
   var queue = [], queued = {}; // fetch queue (1 request per ~1.1 s)
   var running = false, backoffUntil = 0;
-  var doFetch = function (u) { return (window.__NOBOTTY_FETCH || fetch)(u, { credentials: 'omit' }); };
+  var doFetch = function (u) { return (window.__NOBOTTY_FETCH || fetch)(u, { credentials: 'same-origin' }); };
 
   /* ---- storage with a tiny fallback so it can be tested outside an extension ---- */
   var hasChrome = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
@@ -133,6 +133,7 @@
     var m = (el.getAttribute('aria-label') || el.innerText || '').match(/\bu\/([A-Za-z0-9_-]{3,20})\b/); return m ? m[1] : null;
   }
   function evaluateDMs() {
+    stats.dms = 0;
     if (!cfg.enabled || !cfg.dmFilter) { document.querySelectorAll('[data-nobotty-dm]').forEach(function (el) { clear(el); el.removeAttribute('data-nobotty-dm'); }); return; }
     document.querySelectorAll(DM_SEL).forEach(function (el) {
       var text = (el.innerText || el.textContent || '').trim(); if (text.length < 4) return;
@@ -142,32 +143,58 @@
       var k = dmKind(text, info, name);
       var hide = k && ((k.kind === 'seller' && cfg.dmBlockSellers) || ((k.kind === 'scam' || k.kind === 'bot') && cfg.dmBlockBots));
       if (!hide) { if (el.hasAttribute('data-nobotty-dm')) { clear(el); el.removeAttribute('data-nobotty-dm'); } return; }
+      stats.dms++;
       el.setAttribute('data-nobotty-dm', k.kind);
       el.setAttribute('data-nobotty', 'high');
       el.setAttribute('data-nobotty-label', 'Nobotty hid a message (' + k.why + (name ? ' from u/' + name : '') + '). Click to ' + (el.hasAttribute('data-nobotty-open') ? 'hide' : 'show') + '.');
     });
   }
 
+
+  /* ---- status chip: shows that Nobotty runs and what it found (helps when nothing is marked) ---- */
+  var stats = { seen: 0, withAuthor: 0, checked: 0, failed: 0, lastErr: '', flagged: 0, dms: 0 };
+  var chip = null; /* defined before use in observer */
+  function drawChip() {
+    if (!cfg.showStatus || !document.body) { if (chip) chip.style.display = 'none'; return; }
+    if (!chip) {
+      chip = document.createElement('div');
+      chip.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483000;padding:7px 12px;border-radius:999px;background:#10231a;color:#f4f6ef;font:600 12px/1.3 system-ui,sans-serif;opacity:.8;cursor:pointer;max-width:80vw';
+      chip.title = 'Nobotty status. Click to hide (turn back on in settings).';
+      chip.addEventListener('click', function () { cfg.showStatus = false; sSet({ cfg: cfg }); drawChip(); });
+      document.body.appendChild(chip);
+    }
+    chip.style.display = 'block';
+    var txt = 'Nobotty: ' + stats.seen + ' comments, ' + stats.checked + ' accounts checked, ' + stats.flagged + ' flagged' + (stats.dms ? ', ' + stats.dms + ' messages hidden' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
+    if (chip.textContent !== txt) chip.textContent = txt;
+  }
+
   /* ---- apply to the page ---- */
   var pending = false;
   function evaluate() {
     evaluateDMs();
-    if (!cfg.enabled) { document.querySelectorAll('[data-nobotty]').forEach(clear); return; }
+    if (!cfg.enabled) { document.querySelectorAll('[data-nobotty]').forEach(clear); afterEval(); return; }
     var dups = duplicateMap();
+    stats.seen = 0; stats.withAuthor = 0; stats.checked = 0; stats.failed = 0; stats.flagged = 0;
     document.querySelectorAll(SEL).forEach(function (el) {
+      stats.seen++;
       var name = authorOf(el); if (!name) return;
+      stats.withAuthor++;
+      var ci = cache[name]; if (ci && !ci.err) stats.checked++; else if (ci && ci.err) { stats.failed++; stats.lastErr = 'HTTP ' + ci.err; }
       if (cfg.trusted.indexOf(name.toLowerCase()) !== -1) { clear(el); return; }
       var info = cache[name]; if (!info) want(name);
       var a = accountSignals(info, name), t = textSignals(textOf(el)), pts = a.pts + t.pts, why = a.why.concat(t.why);
       if (dups[normalize(textOf(el))]) { pts += 3; why.push('same text as another account'); }
       var lv = level(pts);
       if (lv === 'none' || (lv === 'medium' && !cfg.showMedium)) { clear(el); return; }
+      stats.flagged++;
       el.setAttribute('data-nobotty', lv);
       el.setAttribute('data-nobotty-label', 'Nobotty: ' + lv + ' signals (' + why.join(', ') + '). Click to ' + (el.hasAttribute('data-nobotty-open') ? 'collapse' : 'show') + '.');
       el.setAttribute('title', 'Signals only, not proof. u/' + name);
       if (lv === 'high' && !cfg.collapseHigh) el.setAttribute('data-nobotty-open', '1');
     });
+    afterEval();
   }
+  function afterEval() { drawChip(); try { console.log('[Nobotty]', JSON.stringify(stats)); } catch (e) {} }
   function clear(el) { el.removeAttribute('data-nobotty'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); }
   function schedule() { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, 400); }
 
@@ -184,7 +211,7 @@
     cfg = Object.assign({}, DEFAULTS, (r && r.cfg) || {});
     loadCache(function () {
       evaluate();
-      new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+      new MutationObserver(function (m) { for (var i = 0; i < m.length; i++) { if (m[i].target !== chip && !(chip && chip.contains(m[i].target))) { schedule(); return; } } }).observe(document.body, { childList: true, subtree: true });
     });
   });
   window.addEventListener('nobotty-config', function (e) { cfg = Object.assign({}, DEFAULTS, e.detail || {}); evaluate(); });
