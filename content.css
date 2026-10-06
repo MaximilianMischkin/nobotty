@@ -1,17 +1,22 @@
-/* Nobotty: a soft colour stripe next to each checked comment (works with Reddit's shadow DOM).
-   red = low trust, orange = medium, green = good. The stripe covers only the comment itself. */
+/* Nobotty: a small colour dot at each checked account's avatar (works with Reddit's shadow DOM).
+   red = low trust, orange = medium, green = good. Optional: a thin stripe instead (setting "Use a stripe"). */
 [data-nobotty]{position:relative;--nb-c:transparent}
 [data-nobotty="low"]{--nb-c:#f0646b}
 [data-nobotty="medium"]{--nb-c:#f3b04e}
 [data-nobotty="good"]{--nb-c:#4fc08d}
-[data-nobotty]::after{content:"";position:absolute;left:-10px;top:3px;width:3px;height:calc(var(--nb-h, 100%) - 6px);border-radius:3px;background:var(--nb-c);opacity:.9;pointer-events:none}
-@keyframes nobotty-in{from{opacity:0;transform:scaleY(.5)}to{opacity:.9;transform:none}}
-@media (prefers-reduced-motion:no-preference){[data-nobotty]::after{transform-origin:top;animation:nobotty-in 260ms cubic-bezier(.23,1,.32,1)}}
+/* dot (default) */
+[data-nobotty]::after{content:"";position:absolute;left:var(--nb-dx,-12px);top:var(--nb-dy,6px);width:9px;height:9px;border-radius:50%;
+  background:var(--nb-c);box-shadow:0 0 0 2px var(--nb-ring,#0e1113);pointer-events:none;z-index:2}
+/* stripe (option) */
+html[data-nobotty-style="stripe"] [data-nobotty]::after{left:-10px;top:3px;width:3px;height:calc(var(--nb-h, 100%) - 6px);border-radius:3px;box-shadow:none;opacity:.9}
+@keyframes nobotty-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:no-preference){[data-nobotty]::after{animation:nobotty-pop 220ms cubic-bezier(.23,1,.32,1)}}
 /* optional one-line collapse (low trust comments, or hidden direct messages) */
 [data-nobotty-collapse]:not([data-nobotty-open]),[data-nobotty-dm]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}
-[data-nobotty-collapse]:not([data-nobotty-open])::after,[data-nobotty-dm]:not([data-nobotty-open])::after{height:16px}
 [data-nobotty-collapse]::before,[data-nobotty-dm]::before{
   content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;
-  color:#f0646b;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  color:#f0646b;padding:0 8px 0 20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+[data-nobotty-collapse]::after,[data-nobotty-dm]::after,
+html[data-nobotty-style="stripe"] [data-nobotty-collapse]::after,html[data-nobotty-style="stripe"] [data-nobotty-dm]::after{left:6px;top:6px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 2px var(--nb-ring,#0e1113);height:9px}
 [data-nobotty-dm]{--nb-c:#f0646b}
-[data-nobotty-dm]::after{content:"";position:absolute;left:-10px;top:3px;width:3px;height:16px;border-radius:3px;background:var(--nb-c);opacity:.9;pointer-events:none}
+[data-nobotty-dm]::after{content:"";position:absolute;background:var(--nb-c);pointer-events:none;z-index:2}

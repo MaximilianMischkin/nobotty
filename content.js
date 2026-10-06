@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var DAY = 86400000, TTL = 7 * DAY;
-  var DEFAULTS = { enabled: true, collapseHigh: false, showMedium: true, showGood: true, deepScan: false, hoverReasons: false,
+  var DEFAULTS = { enabled: true, collapseHigh: false, showMedium: true, showGood: true, deepScan: false, hoverReasons: false, useStripe: false,
                    trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true, showStatus: true };
   var cfg = Object.assign({}, DEFAULTS);
   var cache = {};                 // name -> {t, created, karma, hist, err}
@@ -285,6 +285,7 @@
   function evaluate() {
     evaluateDMs();
     if (!cfg.enabled) { document.querySelectorAll('[data-nobotty]').forEach(clear); afterEval(); return; }
+    if (cfg.useStripe) document.documentElement.setAttribute('data-nobotty-style', 'stripe'); else document.documentElement.removeAttribute('data-nobotty-style');
     var dups = duplicateMap();
     stats.seen = 0; stats.withAuthor = 0; stats.checked = 0; stats.failed = 0; stats.low = 0; stats.mid = 0; stats.good = 0; stats.hist = 0;
     document.querySelectorAll(SEL).forEach(function (el) {
@@ -305,14 +306,42 @@
       if (lv === 'neutral' || (lv === 'medium' && !cfg.showMedium) || (lv === 'good' && !cfg.showGood)) { clear(el); return; }
       if (lv === 'low') stats.low++; else if (lv === 'medium') stats.mid++; else stats.good++;
       el.setAttribute('data-nobotty', lv);
-      setOwnHeight(el);
+      setOwnHeight(el); placeMarker(el); setRing(el);
       if (cfg.hoverReasons) el.setAttribute('title', 'Signals only, not proof: ' + (why.join(', ') || 'no warning signs')); else el.removeAttribute('title');
       if (lv === 'low' && cfg.collapseHigh) { el.setAttribute('data-nobotty-collapse', '1'); el.setAttribute('data-nobotty-label', 'Low trust · u/' + name); }
       else { el.removeAttribute('data-nobotty-collapse'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); }
     });
     afterEval();
   }
-  /* The stripe should only cover the comment itself, not its whole reply tree. */
+  /* The marker is a small dot at the avatar (or next to the username if there is no avatar). */
+  function findAvatar(el) {
+    var list = el.querySelectorAll(':scope > [slot="commentAvatar"], :scope > [slot="avatar"], :scope > [slot="commentMeta"] img, :scope > [slot="commentMeta"] faceplate-img, :scope > [slot="commentMeta"] shreddit-avatar, :scope > .entry img, :scope > img');
+    for (var i = 0; i < list.length; i++) { var r = list[i].getBoundingClientRect(); if (r.width >= 12 && r.width <= 72 && r.height >= 12) return r; }
+    return null;
+  }
+  function findNameLink(el) {
+    var l = el.querySelector(':scope > [slot="commentMeta"] a[href*="/user/"]') || el.querySelector(':scope > .entry a.author') || el.querySelector(':scope > .entry a[href*="/user/"]');
+    return l ? l.getBoundingClientRect() : null;
+  }
+  function placeMarker(el) {
+    var host = el.getBoundingClientRect(), dx = -12, dy = 6, av = findAvatar(el);
+    if (av) { dx = av.right - host.left - 9; dy = av.bottom - host.top - 9; }
+    else { var nm = findNameLink(el); if (nm) { dx = nm.left - host.left - 14; dy = nm.top - host.top + (nm.height - 9) / 2; } }
+    el.style.setProperty('--nb-dx', Math.round(dx) + 'px'); el.style.setProperty('--nb-dy', Math.round(dy) + 'px');
+  }
+  var ringDone = 0;
+  function setRing(el) {
+    if (Date.now() - ringDone < 5000) return; ringDone = Date.now();
+    var n = el, c = '';
+    while (n && n.nodeType === 1) {
+      var bg = getComputedStyle(n).backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') { c = bg; break; }
+      n = n.parentElement || (n.getRootNode && n.getRootNode().host);
+    }
+    if (!c) { var b = getComputedStyle(document.body).backgroundColor; c = (b && b !== 'rgba(0, 0, 0, 0)') ? b : '#0e1113'; }
+    document.documentElement.style.setProperty('--nb-ring', c);
+  }
+  /* In stripe mode the stripe should only cover the comment itself, not its whole reply tree. */
   function setOwnHeight(el) {
     var own = el.querySelector(':scope > [slot="actionRow"]') || el.querySelector(':scope > [slot="comment"]') || el.querySelector(':scope > .entry');
     if (!own) { el.style.removeProperty('--nb-h'); return; }
@@ -321,7 +350,7 @@
   }
   function afterEval() { drawChip(); try { console.log('[Nobotty]', JSON.stringify(stats)); } catch (e) {} }
   function clear(el) {
-    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); }); el.style.removeProperty('--nb-h');
+    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); }); ['--nb-h', '--nb-dx', '--nb-dy'].forEach(function (v) { el.style.removeProperty(v); });
   }
   function schedule(ms) { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, typeof ms === 'number' ? ms : 400); }
 

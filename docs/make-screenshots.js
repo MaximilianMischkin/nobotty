@@ -11,14 +11,14 @@ const C=[
  {u:'LeadGenDeals',av:'#ef4444',t:'1h',txt:'Boost your traffic today, DM me and add me on Telegram for the full list.',kids:[]}
 ];
 function comment(c){
-  return `<shreddit-comment author="${c.u}"><div slot="commentMeta" class="meta"><i style="background:${c.av}"></i><b>${c.u}</b><span>${c.t} ago</span></div><div slot="comment" class="body">${c.txt}</div><div slot="actionRow" class="row"><span>⇧ ${3+c.u.length%7}</span><span>Reply</span><span>Share</span></div>${(c.kids||[]).map(k=>'<div class="kid">'+comment(k)+'</div>').join('')}</shreddit-comment>`;
+  return `<shreddit-comment author="${c.u}"><div slot="commentMeta" class="meta"><img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='12' fill='${c.av.replace('#','%23')}'/></svg>" width=24 height=24><b>${c.u}</b><span>${c.t} ago</span></div><div slot="comment" class="body">${c.txt}</div><div slot="actionRow" class="row"><span>⇧ ${3+c.u.length%7}</span><span>Reply</span><span>Share</span></div>${(c.kids||[]).map(k=>'<div class="kid">'+comment(k)+'</div>').join('')}</shreddit-comment>`;
 }
 const page=`<!doctype html><meta charset="utf-8"><style>
 body{margin:0;background:#0e1113;color:#d7dadc;font:14px/1.5 -apple-system,system-ui,sans-serif}
 .wrap{padding:28px 40px 28px 52px}
 h4{margin:0 0 14px;font:600 15px system-ui;color:#f2f4f5}
 shreddit-comment{display:block;position:relative;margin:0 0 14px}
-.meta{display:flex;align-items:center;gap:8px;font-size:12px;color:#8b98a0}.meta b{color:#e8eaeb}.meta i{width:24px;height:24px;border-radius:50%;display:inline-block}
+.meta{display:flex;align-items:center;gap:8px;font-size:12px;color:#8b98a0}.meta b{color:#e8eaeb}.meta img{border-radius:50%;display:inline-block}
 .body{margin:4px 0 4px 32px;color:#d7dadc}
 .row{margin:0 0 6px 32px;display:flex;gap:16px;font-size:12px;color:#8b98a0}
 .kid{margin:10px 0 0 32px}

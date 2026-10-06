@@ -12,7 +12,7 @@ Everything runs in your browser. No tracking, no server, no accounts. See [PRIVA
 
 ## What it does
 
-- **Colour stripe, no clutter.** Every checked comment gets a thin stripe on its left edge: **red** = low trust, **orange** = medium, **green** = good. No labels, no extra rows. Optional: collapse red comments to one line, show the reason as a tooltip.
+- **A colour dot, no clutter.** Every checked account gets a small coloured dot at its avatar: **red** = low trust, **orange** = medium, **green** = good. No labels, no extra rows. Optional: a thin stripe instead of the dot, collapse red comments to one line, show the reason as a tooltip.
 - **History check.** For suspicious accounts Nobotty also reads the account's last ~40 public posts and comments (locally, nothing is sent anywhere) and looks for bot patterns: shortened or link-hub URLs, the same link or text repeated, bursts of posts within minutes, spreading across many subreddits.
 - **Direct messages:** hides scam and bot messages (crypto, "add me on Telegram", new accounts that send links). Sales pitches ("I can build your website", SEO offers, free audits) have their own switch.
 - **Fast and polite:** four lookups in parallel, what you see first, and it spaces requests to stay inside Reddit's rate limit. Results are cached for 7 days.

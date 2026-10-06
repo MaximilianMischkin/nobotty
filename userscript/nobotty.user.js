@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nobotty
 // @namespace    https://github.com/MaximilianMischkin/nobotty
-// @version      0.2.1
+// @version      0.3.0
 // @description  Spot likely bots, scams and sales pitches on Reddit. Runs locally.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -9,12 +9,12 @@
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
-(function(){var st=document.createElement('style');st.textContent="/* Nobotty: a soft colour stripe next to each checked comment (works with Reddit's shadow DOM).\n   red = low trust, orange = medium, green = good. The stripe covers only the comment itself. */\n[data-nobotty]{position:relative;--nb-c:transparent}\n[data-nobotty=\"low\"]{--nb-c:#f0646b}\n[data-nobotty=\"medium\"]{--nb-c:#f3b04e}\n[data-nobotty=\"good\"]{--nb-c:#4fc08d}\n[data-nobotty]::after{content:\"\";position:absolute;left:-10px;top:3px;width:3px;height:calc(var(--nb-h, 100%) - 6px);border-radius:3px;background:var(--nb-c);opacity:.9;pointer-events:none}\n@keyframes nobotty-in{from{opacity:0;transform:scaleY(.5)}to{opacity:.9;transform:none}}\n@media (prefers-reduced-motion:no-preference){[data-nobotty]::after{transform-origin:top;animation:nobotty-in 260ms cubic-bezier(.23,1,.32,1)}}\n/* optional one-line collapse (low trust comments, or hidden direct messages) */\n[data-nobotty-collapse]:not([data-nobotty-open]),[data-nobotty-dm]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}\n[data-nobotty-collapse]:not([data-nobotty-open])::after,[data-nobotty-dm]:not([data-nobotty-open])::after{height:16px}\n[data-nobotty-collapse]::before,[data-nobotty-dm]::before{\n  content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;\n  color:#f0646b;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}\n[data-nobotty-dm]{--nb-c:#f0646b}\n[data-nobotty-dm]::after{content:\"\";position:absolute;left:-10px;top:3px;width:3px;height:16px;border-radius:3px;background:var(--nb-c);opacity:.9;pointer-events:none}\n";document.head.appendChild(st);})();
+(function(){var st=document.createElement('style');st.textContent="/* Nobotty: a small colour dot at each checked account's avatar (works with Reddit's shadow DOM).\n   red = low trust, orange = medium, green = good. Optional: a thin stripe instead (setting \"Use a stripe\"). */\n[data-nobotty]{position:relative;--nb-c:transparent}\n[data-nobotty=\"low\"]{--nb-c:#f0646b}\n[data-nobotty=\"medium\"]{--nb-c:#f3b04e}\n[data-nobotty=\"good\"]{--nb-c:#4fc08d}\n/* dot (default) */\n[data-nobotty]::after{content:\"\";position:absolute;left:var(--nb-dx,-12px);top:var(--nb-dy,6px);width:9px;height:9px;border-radius:50%;\n  background:var(--nb-c);box-shadow:0 0 0 2px var(--nb-ring,#0e1113);pointer-events:none;z-index:2}\n/* stripe (option) */\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty]::after{left:-10px;top:3px;width:3px;height:calc(var(--nb-h, 100%) - 6px);border-radius:3px;box-shadow:none;opacity:.9}\n@keyframes nobotty-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}\n@media (prefers-reduced-motion:no-preference){[data-nobotty]::after{animation:nobotty-pop 220ms cubic-bezier(.23,1,.32,1)}}\n/* optional one-line collapse (low trust comments, or hidden direct messages) */\n[data-nobotty-collapse]:not([data-nobotty-open]),[data-nobotty-dm]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}\n[data-nobotty-collapse]::before,[data-nobotty-dm]::before{\n  content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;\n  color:#f0646b;padding:0 8px 0 20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}\n[data-nobotty-collapse]::after,[data-nobotty-dm]::after,\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty-collapse]::after,html[data-nobotty-style=\"stripe\"] [data-nobotty-dm]::after{left:6px;top:6px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 2px var(--nb-ring,#0e1113);height:9px}\n[data-nobotty-dm]{--nb-c:#f0646b}\n[data-nobotty-dm]::after{content:\"\";position:absolute;background:var(--nb-c);pointer-events:none;z-index:2}\n";document.head.appendChild(st);})();
 /* Nobotty content script. Local only: reads the page and public account info, shows a colour stripe per comment. */
 (function () {
   'use strict';
   var DAY = 86400000, TTL = 7 * DAY;
-  var DEFAULTS = { enabled: true, collapseHigh: false, showMedium: true, showGood: true, deepScan: false, hoverReasons: false,
+  var DEFAULTS = { enabled: true, collapseHigh: false, showMedium: true, showGood: true, deepScan: false, hoverReasons: false, useStripe: false,
                    trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true, showStatus: true };
   var cfg = Object.assign({}, DEFAULTS);
   var cache = {};                 // name -> {t, created, karma, hist, err}
@@ -297,6 +297,7 @@
   function evaluate() {
     evaluateDMs();
     if (!cfg.enabled) { document.querySelectorAll('[data-nobotty]').forEach(clear); afterEval(); return; }
+    if (cfg.useStripe) document.documentElement.setAttribute('data-nobotty-style', 'stripe'); else document.documentElement.removeAttribute('data-nobotty-style');
     var dups = duplicateMap();
     stats.seen = 0; stats.withAuthor = 0; stats.checked = 0; stats.failed = 0; stats.low = 0; stats.mid = 0; stats.good = 0; stats.hist = 0;
     document.querySelectorAll(SEL).forEach(function (el) {
@@ -317,14 +318,42 @@
       if (lv === 'neutral' || (lv === 'medium' && !cfg.showMedium) || (lv === 'good' && !cfg.showGood)) { clear(el); return; }
       if (lv === 'low') stats.low++; else if (lv === 'medium') stats.mid++; else stats.good++;
       el.setAttribute('data-nobotty', lv);
-      setOwnHeight(el);
+      setOwnHeight(el); placeMarker(el); setRing(el);
       if (cfg.hoverReasons) el.setAttribute('title', 'Signals only, not proof: ' + (why.join(', ') || 'no warning signs')); else el.removeAttribute('title');
       if (lv === 'low' && cfg.collapseHigh) { el.setAttribute('data-nobotty-collapse', '1'); el.setAttribute('data-nobotty-label', 'Low trust · u/' + name); }
       else { el.removeAttribute('data-nobotty-collapse'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); }
     });
     afterEval();
   }
-  /* The stripe should only cover the comment itself, not its whole reply tree. */
+  /* The marker is a small dot at the avatar (or next to the username if there is no avatar). */
+  function findAvatar(el) {
+    var list = el.querySelectorAll(':scope > [slot="commentAvatar"], :scope > [slot="avatar"], :scope > [slot="commentMeta"] img, :scope > [slot="commentMeta"] faceplate-img, :scope > [slot="commentMeta"] shreddit-avatar, :scope > .entry img, :scope > img');
+    for (var i = 0; i < list.length; i++) { var r = list[i].getBoundingClientRect(); if (r.width >= 12 && r.width <= 72 && r.height >= 12) return r; }
+    return null;
+  }
+  function findNameLink(el) {
+    var l = el.querySelector(':scope > [slot="commentMeta"] a[href*="/user/"]') || el.querySelector(':scope > .entry a.author') || el.querySelector(':scope > .entry a[href*="/user/"]');
+    return l ? l.getBoundingClientRect() : null;
+  }
+  function placeMarker(el) {
+    var host = el.getBoundingClientRect(), dx = -12, dy = 6, av = findAvatar(el);
+    if (av) { dx = av.right - host.left - 9; dy = av.bottom - host.top - 9; }
+    else { var nm = findNameLink(el); if (nm) { dx = nm.left - host.left - 14; dy = nm.top - host.top + (nm.height - 9) / 2; } }
+    el.style.setProperty('--nb-dx', Math.round(dx) + 'px'); el.style.setProperty('--nb-dy', Math.round(dy) + 'px');
+  }
+  var ringDone = 0;
+  function setRing(el) {
+    if (Date.now() - ringDone < 5000) return; ringDone = Date.now();
+    var n = el, c = '';
+    while (n && n.nodeType === 1) {
+      var bg = getComputedStyle(n).backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') { c = bg; break; }
+      n = n.parentElement || (n.getRootNode && n.getRootNode().host);
+    }
+    if (!c) { var b = getComputedStyle(document.body).backgroundColor; c = (b && b !== 'rgba(0, 0, 0, 0)') ? b : '#0e1113'; }
+    document.documentElement.style.setProperty('--nb-ring', c);
+  }
+  /* In stripe mode the stripe should only cover the comment itself, not its whole reply tree. */
   function setOwnHeight(el) {
     var own = el.querySelector(':scope > [slot="actionRow"]') || el.querySelector(':scope > [slot="comment"]') || el.querySelector(':scope > .entry');
     if (!own) { el.style.removeProperty('--nb-h'); return; }
@@ -333,7 +362,7 @@
   }
   function afterEval() { drawChip(); try { console.log('[Nobotty]', JSON.stringify(stats)); } catch (e) {} }
   function clear(el) {
-    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); }); el.style.removeProperty('--nb-h');
+    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); }); ['--nb-h', '--nb-dx', '--nb-dy'].forEach(function (v) { el.style.removeProperty(v); });
   }
   function schedule(ms) { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, typeof ms === 'number' ? ms : 400); }
 
@@ -368,7 +397,7 @@
   btn.style.cssText = 'position:fixed;left:12px;bottom:48px;z-index:2147483000;padding:8px 14px;border:0;border-radius:999px;background:#10231a;color:#f4f6ef;font:600 13px system-ui,sans-serif;cursor:pointer;opacity:.75';
   var box = document.createElement('div'); box.hidden = true;
   box.style.cssText = 'position:fixed;left:12px;bottom:88px;z-index:2147483000;width:290px;padding:14px;border-radius:16px;background:#f4f6ef;color:#10231a;font:14px/1.4 system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.35)';
-  var rows = [['enabled','Turn on','Colour stripe on every checked comment'],['showMedium','Orange: medium trust','Some warning signs'],['showGood','Green: good trust','Old account, no warning signs'],['collapseHigh','Collapse red comments','Shrink low trust comments to one line'],['deepScan','Check history of every account','Slower'],['hoverReasons','Show reasons on hover','Plain tooltip'],['showStatus','Show status chip','Small badge'],['dmFilter','Filter direct messages','Hide scam and bot messages'],['dmBlockBots','Hide bots and scams','Crypto, add-me-on-Telegram'],['dmBlockSellers','Hide sales pitches too','Turn off to receive offers']];
+  var rows = [['enabled','Turn on','Colour stripe on every checked comment'],['showMedium','Orange: medium trust','Some warning signs'],['showGood','Green: good trust','Old account, no warning signs'],['collapseHigh','Collapse red comments','Shrink low trust comments to one line'],['deepScan','Check history of every account','Slower'],['hoverReasons','Show reasons on hover','Plain tooltip'],['useStripe','Use a stripe instead of a dot','Thin line at the left edge'],['showStatus','Show status chip','Small badge'],['dmFilter','Filter direct messages','Hide scam and bot messages'],['dmBlockBots','Hide bots and scams','Crypto, add-me-on-Telegram'],['dmBlockSellers','Hide sales pitches too','Turn off to receive offers']];
   var c = load(), html = '<b style="font-size:16px">Nobotty</b><div style="color:#44584c;font-size:12px;margin:2px 0 8px">Signals, not proof. Runs on your device.</div>';
   rows.forEach(function (r) { html += '<label style="display:flex;gap:8px;padding:6px 0;border-top:1px solid #d5ddcf;cursor:pointer"><input type="checkbox" data-k="' + r[0] + '" style="margin-top:3px"' + (c[r[0]] ? ' checked' : '') + '><span>' + r[1] + '<small style="display:block;color:#5a6d60">' + r[2] + '</small></span></label>'; });
   html += '<div style="margin-top:8px"><b>Trusted accounts</b><small style="display:block;color:#5a6d60">One username per line</small><textarea data-k="trusted" style="width:100%;height:50px;box-sizing:border-box;margin-top:4px;border:1px solid #cdd7c8;border-radius:8px;padding:6px">' + c.trusted.join('\n') + '</textarea></div><button data-save style="margin-top:8px;width:100%;padding:9px;border:0;border-radius:999px;background:#e8693f;color:#10231a;font-weight:600;cursor:pointer">Save</button>';
