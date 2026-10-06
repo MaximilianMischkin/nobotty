@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nobotty
 // @namespace    https://github.com/MaximilianMischkin/nobotty
-// @version      0.1.2
+// @version      0.1.4
 // @description  Spot likely bots, scams and sales pitches on Reddit. Runs locally.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -19,13 +19,40 @@
   var cache = {};              // name -> {t, created, karma, err}
   var queue = [], queued = {}; // fetch queue (1 request per ~1.1 s)
   var running = false, backoffUntil = 0;
-  var doFetch = function (u) {
+  /* Account lookup. In an extension the background script does the request (works around page CSP and Firefox
+     cross-compartment errors). As a userscript, or in tests, it falls back to a same-origin fetch. */
+  var rt = (typeof browser !== 'undefined' && browser.runtime && browser.runtime.id) ? browser.runtime
+         : (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) ? chrome.runtime : null;
+  function withTimeout(p, ms, msg) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () { reject(new Error(msg)); }, ms);
+      p.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
+    });
+  }
+  var version = '';
+  try { if (rt && rt.getManifest) version = rt.getManifest().version; } catch (e) {}
+  var bgState = rt ? 'checking' : 'n/a';
+  if (rt) {
+    withTimeout(Promise.resolve(rt.sendMessage({ type: 'nobotty-ping' })), 4000, 'timeout')
+      .then(function (r) { bgState = r && r.pong ? 'ok' : 'bad answer'; drawChip(); },
+            function (e) { bgState = 'NOT RESPONDING (' + String((e && e.message) || e).slice(0, 40) + ')'; drawChip(); });
+  }
+  function lookup(name) {
+    if (rt && !window.__NOBOTTY_FETCH) {
+      return withTimeout(Promise.resolve(rt.sendMessage({ type: 'nobotty-about', name: name })), 8000, 'background not responding').then(function (r) {
+        if (!r) throw new Error('no answer from background');
+        if (r.error && !r.status) throw new Error(r.error);
+        return r;
+      });
+    }
     var f = window.__NOBOTTY_FETCH || window.fetch.bind(window);
     var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = ctl ? setTimeout(function () { ctl.abort(); }, 8000) : null;
-    var p = f(u, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: ctl ? ctl.signal : undefined });
-    return p.then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });
-  };
+    return f(location.origin + '/user/' + encodeURIComponent(name) + '/about.json?raw_json=1', { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { clearTimeout(timer); if (!r.ok) return { ok: false, status: r.status }; return r.json().then(function (data) { return { ok: true, status: r.status, data: data }; }); },
+            function (e) { clearTimeout(timer); throw e; });
+  }
+
 
   /* ---- storage with a tiny fallback so it can be tested outside an extension ---- */
   var hasChrome = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
@@ -103,11 +130,11 @@
     var wait = Math.max(0, backoffUntil - Date.now());
     setTimeout(function () {
       var name = queue.shift(); delete queued[name];
-      doFetch(location.origin + '/user/' + encodeURIComponent(name) + '/about.json?raw_json=1')
+      lookup(name)
         .then(function (r) {
           if (r.status === 429) { backoffUntil = Date.now() + 60000; queue.unshift(name); queued[name] = 1; throw new Error('rate'); }
-          if (!r.ok) { cache[name] = { t: Date.now(), err: r.status }; return null; }
-          return r.json();
+          if (!r.ok) { cache[name] = { t: Date.now(), err: r.status || r.error || 'failed' }; return null; }
+          return r.data;
         })
         .then(function (j) {
           if (j && j.data) cache[name] = { t: Date.now(), created: j.data.created_utc, karma: (j.data.total_karma != null ? j.data.total_karma : (j.data.link_karma || 0) + (j.data.comment_karma || 0)) };
@@ -120,7 +147,7 @@
           try { console.warn('[Nobotty] lookup failed for ' + name + ':', e); } catch (x) {}
           evaluate();
         })
-        .then(function () { running = false; setTimeout(pump, 1100); });
+        .then(function () { running = false; drawChip(); setTimeout(pump, 1100); });
     }, wait);
   }
 
@@ -188,7 +215,8 @@
       document.body.appendChild(chip);
     }
     chip.style.display = 'block';
-    var txt = 'Nobotty: ' + stats.seen + ' comments, ' + stats.checked + ' accounts checked, ' + stats.flagged + ' flagged' + (stats.dms ? ', ' + stats.dms + ' messages hidden' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
+    var waiting = queue.length + (running ? 1 : 0);
+    var txt = 'Nobotty' + (version ? ' ' + version : '') + ': ' + stats.seen + ' comments, ' + stats.checked + ' accounts checked, ' + stats.flagged + ' flagged' + (stats.dms ? ', ' + stats.dms + ' messages hidden' : '') + (waiting ? ', ' + waiting + ' waiting' : '') + (bgState !== 'ok' && bgState !== 'n/a' ? ' [background: ' + bgState + ']' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
     if (chip.textContent !== txt) chip.textContent = txt;
   }
 

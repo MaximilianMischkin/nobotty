@@ -1,6 +1,7 @@
 /* Nobotty background: looks up public account info for a username. Only reddit.com, only valid usernames. */
 var api = typeof browser !== 'undefined' ? browser : chrome;
 api.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
+  if (msg && msg.type === 'nobotty-ping') { sendResponse({ pong: true }); return; }
   if (!msg || msg.type !== 'nobotty-about') return;
   var name = String(msg.name || '');
   if (!/^[A-Za-z0-9_-]{3,20}$/.test(name)) { sendResponse({ ok: false, status: 0, error: 'bad name' }); return; }

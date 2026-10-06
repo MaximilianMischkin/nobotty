@@ -11,9 +11,23 @@
      cross-compartment errors). As a userscript, or in tests, it falls back to a same-origin fetch. */
   var rt = (typeof browser !== 'undefined' && browser.runtime && browser.runtime.id) ? browser.runtime
          : (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) ? chrome.runtime : null;
+  function withTimeout(p, ms, msg) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () { reject(new Error(msg)); }, ms);
+      p.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
+    });
+  }
+  var version = '';
+  try { if (rt && rt.getManifest) version = rt.getManifest().version; } catch (e) {}
+  var bgState = rt ? 'checking' : 'n/a';
+  if (rt) {
+    withTimeout(Promise.resolve(rt.sendMessage({ type: 'nobotty-ping' })), 4000, 'timeout')
+      .then(function (r) { bgState = r && r.pong ? 'ok' : 'bad answer'; drawChip(); },
+            function (e) { bgState = 'NOT RESPONDING (' + String((e && e.message) || e).slice(0, 40) + ')'; drawChip(); });
+  }
   function lookup(name) {
     if (rt && !window.__NOBOTTY_FETCH) {
-      return Promise.resolve(rt.sendMessage({ type: 'nobotty-about', name: name })).then(function (r) {
+      return withTimeout(Promise.resolve(rt.sendMessage({ type: 'nobotty-about', name: name })), 8000, 'background not responding').then(function (r) {
         if (!r) throw new Error('no answer from background');
         if (r.error && !r.status) throw new Error(r.error);
         return r;
@@ -121,7 +135,7 @@
           try { console.warn('[Nobotty] lookup failed for ' + name + ':', e); } catch (x) {}
           evaluate();
         })
-        .then(function () { running = false; setTimeout(pump, 1100); });
+        .then(function () { running = false; drawChip(); setTimeout(pump, 1100); });
     }, wait);
   }
 
@@ -189,7 +203,8 @@
       document.body.appendChild(chip);
     }
     chip.style.display = 'block';
-    var txt = 'Nobotty: ' + stats.seen + ' comments, ' + stats.checked + ' accounts checked, ' + stats.flagged + ' flagged' + (stats.dms ? ', ' + stats.dms + ' messages hidden' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
+    var waiting = queue.length + (running ? 1 : 0);
+    var txt = 'Nobotty' + (version ? ' ' + version : '') + ': ' + stats.seen + ' comments, ' + stats.checked + ' accounts checked, ' + stats.flagged + ' flagged' + (stats.dms ? ', ' + stats.dms + ' messages hidden' : '') + (waiting ? ', ' + waiting + ' waiting' : '') + (bgState !== 'ok' && bgState !== 'n/a' ? ' [background: ' + bgState + ']' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
     if (chip.textContent !== txt) chip.textContent = txt;
   }
 
