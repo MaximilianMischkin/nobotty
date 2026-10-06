@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nobotty
 // @namespace    https://github.com/MaximilianMischkin/nobotty
-// @version      0.4.3
+// @version      0.4.4
 // @description  Spot likely bots, scams and sales pitches on Reddit. Runs locally.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -208,10 +208,19 @@
       return chunks.reduce(function (p, ch) {
         return p.then(function () { return getJSON('/api/user_data_by_account_ids.json?ids=' + ch.join(',')); }).then(function (u) {
           noteNet('accounts', u); noteLimit(u && u.rl); if (!u || !u.ok || !u.data) return;
-          Object.keys(u.data).forEach(function (k) {
-            var a = u.data[k]; if (!a || !a.name) return;
-            cache[a.name] = { t: Date.now(), created: a.created_utc, karma: (a.link_karma || 0) + (a.comment_karma || 0) };
+          /* Accept {t2_x: {...}}, {data: {t2_x: {...}}} or a list; match by name, else by account id. */
+          var byId = {}; Object.keys(map).forEach(function (n) { byId[map[n]] = n; byId[map[n].replace(/^t2_/, '')] = n; });
+          var src = u.data.data && typeof u.data.data === 'object' ? u.data.data : u.data, got = 0;
+          (Array.isArray(src) ? src.map(function (a) { return [a && (a.id || a.name), a]; }) : Object.keys(src).map(function (k) { return [k, src[k]]; })).forEach(function (kv) {
+            var a = kv[1]; if (!a || typeof a !== 'object') return;
+            var n = a.name || a.username || byId[kv[0]] || byId[String(a.id || '')]; if (!n) return;
+            var created = a.created_utc != null ? a.created_utc : a.created;
+            if (created == null) return;
+            var karma = a.total_karma != null ? a.total_karma : (a.link_karma || 0) + (a.comment_karma || 0);
+            cache[n] = { t: Date.now(), created: created, karma: karma }; got++;
           });
+          try { console.log('[Nobotty] accounts:', got, 'of', ch.length, got ? '' : JSON.stringify(u.data).slice(0, 300)); } catch (x) {}
+          if (!got) lastNet = 'accounts 200 but unreadable: ' + JSON.stringify(u.data).slice(0, 80);
         });
       }, Promise.resolve());
     }).catch(function (e) { if (!lastNet || lastNet.indexOf('thread') !== 0) lastNet = 'bulk ' + String((e && e.message) || e).slice(0, 50); try { console.warn('[Nobotty] bulk lookup failed:', e); } catch (x) {} })
