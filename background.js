@@ -18,6 +18,14 @@ function compact(children) {
 }
 api.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
   if (msg && msg.type === 'nobotty-ping') { sendResponse({ pong: true }); return; }
+  if (msg && msg.type === 'nobotty-get') {
+    /* Only two read-only bulk endpoints: a thread's comment tree and account data for up to 100 account ids. */
+    var p = String(msg.path || '');
+    if (!/^\/comments\/[a-z0-9]{3,12}\.json\?limit=500&depth=12&raw_json=1$/.test(p) && !/^\/api\/user_data_by_account_ids\.json\?ids=(t2_[a-z0-9]{1,12},?){1,100}$/.test(p)) {
+      sendResponse({ ok: false, status: 0, error: 'bad path' }); return;
+    }
+    reddit(p).then(sendResponse); return true;
+  }
   if (!msg || (msg.type !== 'nobotty-about' && msg.type !== 'nobotty-history')) return;
   var name = String(msg.name || '');
   if (!/^[A-Za-z0-9_-]{3,20}$/.test(name)) { sendResponse({ ok: false, status: 0, error: 'bad name' }); return; }

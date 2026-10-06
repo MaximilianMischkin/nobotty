@@ -161,6 +161,50 @@
     if (prio[key] === undefined || d < prio[key]) prio[key] = d + (kind === 'h' ? 5000 : 0);
     if (queued[key]) return; queued[key] = 1; queue.push({ k: kind, n: name }); pump();
   }
+
+  /* Bulk lookup: one request for the thread's comment tree (gives every author's account id),
+     then one request per 100 accounts. Replaces ~1 request per account, which ran into Reddit's limit. */
+  var thread = { id: null, at: 0, busy: false, ids: {} };
+  function getJSON(path) {
+    if (rt && !window.__NOBOTTY_FETCH) return withTimeout(Promise.resolve(rt.sendMessage({ type: 'nobotty-get', path: path })), 15000, 'background not responding');
+    return pageFetch(path);
+  }
+  function collectAuthors(node, out) {
+    if (!node) return;
+    if (Array.isArray(node)) { node.forEach(function (n) { collectAuthors(n, out); }); return; }
+    var d = node.data; if (!d) return;
+    if (d.children) collectAuthors(d.children, out);
+    if (d.author && d.author_fullname && d.author !== '[deleted]') out[d.author] = d.author_fullname;
+    if (d.replies) collectAuthors(d.replies, out);
+  }
+  function bulkPrefetch(unknown) {
+    var m = location.pathname.match(/\/comments\/([a-z0-9]{3,12})/i); if (!m || thread.busy) return;
+    var id = m[1].toLowerCase(), now = Date.now();
+    if (thread.id === id && (unknown < 3 || now - thread.at < 30000)) return;
+    thread.busy = true; thread.id = id; thread.at = now;
+    getJSON('/comments/' + id + '.json?limit=500&depth=12&raw_json=1').then(function (r) {
+      noteLimit(r && r.rl);
+      if (!r || !r.ok) throw new Error('thread ' + ((r && (r.status || r.error)) || 'failed'));
+      var map = {}; collectAuthors(r.data, map);
+      var need = Object.keys(map).filter(function (n) { var c = cache[n]; return !c || c.err || Date.now() - c.t > TTL; });
+      var ids = need.map(function (n) { return map[n]; }), chunks = [];
+      for (var i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+      return chunks.reduce(function (p, ch) {
+        return p.then(function () { return getJSON('/api/user_data_by_account_ids.json?ids=' + ch.join(',')); }).then(function (u) {
+          noteLimit(u && u.rl); if (!u || !u.ok || !u.data) return;
+          Object.keys(u.data).forEach(function (k) {
+            var a = u.data[k]; if (!a || !a.name) return;
+            cache[a.name] = { t: Date.now(), created: a.created_utc, karma: (a.link_karma || 0) + (a.comment_karma || 0) };
+          });
+        });
+      }, Promise.resolve());
+    }).catch(function (e) { try { console.warn('[Nobotty] bulk lookup failed:', e); } catch (x) {} })
+      .then(function () {
+        thread.busy = false;
+        for (var i = queue.length - 1; i >= 0; i--) { var j = queue[i]; if (j.k === 'a' && cache[j.n] && !cache[j.n].err) { delete queued[j.k + ':' + j.n]; queue.splice(i, 1); } }
+        saveCache(); drawChip(); schedule(50);
+      });
+  }
   function nextJob() {
     var bi = 0, bp = Infinity;
     for (var i = 0; i < queue.length; i++) { var p = prio[queue[i].k + ':' + queue[i].n]; if (p === undefined) p = 1e9; if (p < bp) { bp = p; bi = i; } }
@@ -186,6 +230,7 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { pump(); schedule(100); } });
   function pump() {
     if (inflight >= MAXC || !queue.length) return;
+    if (thread.busy) { if (!pumpTimer) pumpTimer = setTimeout(function () { pumpTimer = null; pump(); }, 500); return; }
     var now = Date.now(), wait = Math.max(0, backoffUntil - now, lastStart + spacing() - now);
     if (wait > 0) { if (!pumpTimer) pumpTimer = setTimeout(function () { pumpTimer = null; pump(); }, Math.min(wait, 1000)); return; }
     var job = nextJob(), key = job.k + ':' + job.n; delete queued[key]; inflight++; lastStart = Date.now();
@@ -295,7 +340,9 @@
     evaluateDMs();
     if (!cfg.enabled) { document.querySelectorAll('[data-nobotty]').forEach(clear); afterEval(); return; }
     if (cfg.useStripe) document.documentElement.setAttribute('data-nobotty-style', 'stripe'); else document.documentElement.removeAttribute('data-nobotty-style');
-    var dups = duplicateMap();
+    var dups = duplicateMap(), unknown = 0;
+    document.querySelectorAll(SEL).forEach(function (el) { var n = authorOf(el); if (n && !cache[n]) unknown++; });
+    if (unknown) bulkPrefetch(unknown);
     stats.seen = 0; stats.withAuthor = 0; stats.checked = 0; stats.failed = 0; stats.low = 0; stats.mid = 0; stats.good = 0; stats.hist = 0;
     document.querySelectorAll(SEL).forEach(function (el) {
       stats.seen++;
