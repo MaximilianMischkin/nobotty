@@ -1,4 +1,4 @@
-/* Botless content script. Local only: reads the page and public account info, shows hints. */
+/* Nobotty content script. Local only: reads the page and public account info, shows hints. */
 (function () {
   'use strict';
   var DAY = 86400000, TTL = 7 * DAY;
@@ -7,17 +7,17 @@
   var cache = {};              // name -> {t, created, karma, err}
   var queue = [], queued = {}; // fetch queue (1 request per ~1.1 s)
   var running = false, backoffUntil = 0;
-  var doFetch = function (u) { return (window.__BOTLESS_FETCH || fetch)(u, { credentials: 'omit' }); };
+  var doFetch = function (u) { return (window.__NOBOTTY_FETCH || fetch)(u, { credentials: 'omit' }); };
 
   /* ---- storage with a tiny fallback so it can be tested outside an extension ---- */
   var hasChrome = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
   function sGet(keys, cb) {
     if (hasChrome) return chrome.storage.local.get(keys, cb);
-    var out = {}; keys.forEach(function (k) { try { out[k] = JSON.parse(localStorage.getItem('botless:' + k)); } catch (e) {} }); cb(out);
+    var out = {}; keys.forEach(function (k) { try { out[k] = JSON.parse(localStorage.getItem('nobotty:' + k)); } catch (e) {} }); cb(out);
   }
   function sSet(obj) {
     if (hasChrome) return chrome.storage.local.set(obj);
-    Object.keys(obj).forEach(function (k) { localStorage.setItem('botless:' + k, JSON.stringify(obj[k])); });
+    Object.keys(obj).forEach(function (k) { localStorage.setItem('nobotty:' + k, JSON.stringify(obj[k])); });
   }
 
   /* ---- finding comments (new Reddit: shreddit-comment, old Reddit: .thing.comment) ---- */
@@ -133,18 +133,18 @@
     var m = (el.getAttribute('aria-label') || el.innerText || '').match(/\bu\/([A-Za-z0-9_-]{3,20})\b/); return m ? m[1] : null;
   }
   function evaluateDMs() {
-    if (!cfg.enabled || !cfg.dmFilter) { document.querySelectorAll('[data-botless-dm]').forEach(function (el) { clear(el); el.removeAttribute('data-botless-dm'); }); return; }
+    if (!cfg.enabled || !cfg.dmFilter) { document.querySelectorAll('[data-nobotty-dm]').forEach(function (el) { clear(el); el.removeAttribute('data-nobotty-dm'); }); return; }
     document.querySelectorAll(DM_SEL).forEach(function (el) {
       var text = (el.innerText || el.textContent || '').trim(); if (text.length < 4) return;
       var name = dmAuthor(el) || '';
-      if (name && cfg.trusted.indexOf(name.toLowerCase()) !== -1) { clear(el); el.removeAttribute('data-botless-dm'); return; }
+      if (name && cfg.trusted.indexOf(name.toLowerCase()) !== -1) { clear(el); el.removeAttribute('data-nobotty-dm'); return; }
       var info = name ? cache[name] : null; if (name && !info) want(name);
       var k = dmKind(text, info, name);
       var hide = k && ((k.kind === 'seller' && cfg.dmBlockSellers) || ((k.kind === 'scam' || k.kind === 'bot') && cfg.dmBlockBots));
-      if (!hide) { if (el.hasAttribute('data-botless-dm')) { clear(el); el.removeAttribute('data-botless-dm'); } return; }
-      el.setAttribute('data-botless-dm', k.kind);
-      el.setAttribute('data-botless', 'high');
-      el.setAttribute('data-botless-label', 'Botless hid a message (' + k.why + (name ? ' from u/' + name : '') + '). Click to ' + (el.hasAttribute('data-botless-open') ? 'hide' : 'show') + '.');
+      if (!hide) { if (el.hasAttribute('data-nobotty-dm')) { clear(el); el.removeAttribute('data-nobotty-dm'); } return; }
+      el.setAttribute('data-nobotty-dm', k.kind);
+      el.setAttribute('data-nobotty', 'high');
+      el.setAttribute('data-nobotty-label', 'Nobotty hid a message (' + k.why + (name ? ' from u/' + name : '') + '). Click to ' + (el.hasAttribute('data-nobotty-open') ? 'hide' : 'show') + '.');
     });
   }
 
@@ -152,7 +152,7 @@
   var pending = false;
   function evaluate() {
     evaluateDMs();
-    if (!cfg.enabled) { document.querySelectorAll('[data-botless]').forEach(clear); return; }
+    if (!cfg.enabled) { document.querySelectorAll('[data-nobotty]').forEach(clear); return; }
     var dups = duplicateMap();
     document.querySelectorAll(SEL).forEach(function (el) {
       var name = authorOf(el); if (!name) return;
@@ -162,20 +162,20 @@
       if (dups[normalize(textOf(el))]) { pts += 3; why.push('same text as another account'); }
       var lv = level(pts);
       if (lv === 'none' || (lv === 'medium' && !cfg.showMedium)) { clear(el); return; }
-      el.setAttribute('data-botless', lv);
-      el.setAttribute('data-botless-label', 'Botless: ' + lv + ' signals (' + why.join(', ') + '). Click to ' + (el.hasAttribute('data-botless-open') ? 'collapse' : 'show') + '.');
+      el.setAttribute('data-nobotty', lv);
+      el.setAttribute('data-nobotty-label', 'Nobotty: ' + lv + ' signals (' + why.join(', ') + '). Click to ' + (el.hasAttribute('data-nobotty-open') ? 'collapse' : 'show') + '.');
       el.setAttribute('title', 'Signals only, not proof. u/' + name);
-      if (lv === 'high' && !cfg.collapseHigh) el.setAttribute('data-botless-open', '1');
+      if (lv === 'high' && !cfg.collapseHigh) el.setAttribute('data-nobotty-open', '1');
     });
   }
-  function clear(el) { el.removeAttribute('data-botless'); el.removeAttribute('data-botless-label'); el.removeAttribute('data-botless-open'); }
+  function clear(el) { el.removeAttribute('data-nobotty'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); }
   function schedule() { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, 400); }
 
   /* click on the chip toggles the comment open/closed (the chip is a ::before, so use the host) */
   document.addEventListener('click', function (e) {
-    var el = e.target && e.target.closest && e.target.closest('[data-botless]'); if (!el) return;
+    var el = e.target && e.target.closest && e.target.closest('[data-nobotty]'); if (!el) return;
     var r = el.getBoundingClientRect(); if (e.clientY - r.top > 34) return; // only the label strip
-    if (el.hasAttribute('data-botless-open')) el.removeAttribute('data-botless-open'); else el.setAttribute('data-botless-open', '1');
+    if (el.hasAttribute('data-nobotty-open')) el.removeAttribute('data-nobotty-open'); else el.setAttribute('data-nobotty-open', '1');
     evaluate();
   }, true);
 
@@ -187,9 +187,9 @@
       new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
     });
   });
-  window.addEventListener('botless-config', function (e) { cfg = Object.assign({}, DEFAULTS, e.detail || {}); evaluate(); });
+  window.addEventListener('nobotty-config', function (e) { cfg = Object.assign({}, DEFAULTS, e.detail || {}); evaluate(); });
   if (hasChrome && chrome.storage.onChanged) chrome.storage.onChanged.addListener(function (ch) {
     if (ch.cfg) { cfg = Object.assign({}, DEFAULTS, ch.cfg.newValue || {}); evaluate(); }
   });
-  window.__botless = { dmKind: dmKind, evaluate: evaluate, level: level, accountSignals: accountSignals, textSignals: textSignals };
+  window.__nobotty = { dmKind: dmKind, evaluate: evaluate, level: level, accountSignals: accountSignals, textSignals: textSignals };
 })();

@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         Botless
-// @namespace    https://github.com/MaximilianMischkin/botless
+// @name         Nobotty
+// @namespace    https://github.com/MaximilianMischkin/nobotty
 // @version      0.1.0
 // @description  Spot likely bots, scams and sales pitches on Reddit. Runs locally.
 // @match        https://www.reddit.com/*
@@ -9,8 +9,8 @@
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
-(function(){var st=document.createElement('style');st.textContent="/* Botless: styles live on the comment host element so they work with Reddit's shadow DOM. */\n[data-botless]{position:relative}\n[data-botless=\"medium\"],[data-botless=\"high\"]{box-shadow:inset 3px 0 0 #e8693f}\n[data-botless=\"high\"]::before,[data-botless=\"medium\"]::before{\n  content:attr(data-botless-label);display:block;font:600 12px/1.4 system-ui,-apple-system,sans-serif;\n  color:#e8693f;padding:4px 8px;margin:2px 0 4px 8px;border-radius:999px;background:rgba(232,105,63,.12);width:max-content;max-width:calc(100% - 16px);\n  white-space:normal;cursor:pointer}\n[data-botless=\"high\"]:not([data-botless-open]){display:block;max-height:30px;overflow:hidden;opacity:.7}\n[data-botless=\"medium\"]:not([data-botless-open]){opacity:.85}\n@media (prefers-reduced-motion:no-preference){[data-botless]{transition:opacity 160ms cubic-bezier(.23,1,.32,1)}}\n";document.head.appendChild(st);})();
-/* Botless content script. Local only: reads the page and public account info, shows hints. */
+(function(){var st=document.createElement('style');st.textContent="/* Nobotty: styles live on the comment host element so they work with Reddit's shadow DOM. */\n[data-nobotty]{position:relative}\n[data-nobotty=\"medium\"],[data-nobotty=\"high\"]{box-shadow:inset 3px 0 0 #e8693f}\n[data-nobotty=\"high\"]::before,[data-nobotty=\"medium\"]::before{\n  content:attr(data-nobotty-label);display:block;font:600 12px/1.4 system-ui,-apple-system,sans-serif;\n  color:#e8693f;padding:4px 8px;margin:2px 0 4px 8px;border-radius:999px;background:rgba(232,105,63,.12);width:max-content;max-width:calc(100% - 16px);\n  white-space:normal;cursor:pointer}\n[data-nobotty=\"high\"]:not([data-nobotty-open]){display:block;max-height:30px;overflow:hidden;opacity:.7}\n[data-nobotty=\"medium\"]:not([data-nobotty-open]){opacity:.85}\n@media (prefers-reduced-motion:no-preference){[data-nobotty]{transition:opacity 160ms cubic-bezier(.23,1,.32,1)}}\n";document.head.appendChild(st);})();
+/* Nobotty content script. Local only: reads the page and public account info, shows hints. */
 (function () {
   'use strict';
   var DAY = 86400000, TTL = 7 * DAY;
@@ -19,17 +19,17 @@
   var cache = {};              // name -> {t, created, karma, err}
   var queue = [], queued = {}; // fetch queue (1 request per ~1.1 s)
   var running = false, backoffUntil = 0;
-  var doFetch = function (u) { return (window.__BOTLESS_FETCH || fetch)(u, { credentials: 'omit' }); };
+  var doFetch = function (u) { return (window.__NOBOTTY_FETCH || fetch)(u, { credentials: 'omit' }); };
 
   /* ---- storage with a tiny fallback so it can be tested outside an extension ---- */
   var hasChrome = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
   function sGet(keys, cb) {
     if (hasChrome) return chrome.storage.local.get(keys, cb);
-    var out = {}; keys.forEach(function (k) { try { out[k] = JSON.parse(localStorage.getItem('botless:' + k)); } catch (e) {} }); cb(out);
+    var out = {}; keys.forEach(function (k) { try { out[k] = JSON.parse(localStorage.getItem('nobotty:' + k)); } catch (e) {} }); cb(out);
   }
   function sSet(obj) {
     if (hasChrome) return chrome.storage.local.set(obj);
-    Object.keys(obj).forEach(function (k) { localStorage.setItem('botless:' + k, JSON.stringify(obj[k])); });
+    Object.keys(obj).forEach(function (k) { localStorage.setItem('nobotty:' + k, JSON.stringify(obj[k])); });
   }
 
   /* ---- finding comments (new Reddit: shreddit-comment, old Reddit: .thing.comment) ---- */
@@ -145,18 +145,18 @@
     var m = (el.getAttribute('aria-label') || el.innerText || '').match(/\bu\/([A-Za-z0-9_-]{3,20})\b/); return m ? m[1] : null;
   }
   function evaluateDMs() {
-    if (!cfg.enabled || !cfg.dmFilter) { document.querySelectorAll('[data-botless-dm]').forEach(function (el) { clear(el); el.removeAttribute('data-botless-dm'); }); return; }
+    if (!cfg.enabled || !cfg.dmFilter) { document.querySelectorAll('[data-nobotty-dm]').forEach(function (el) { clear(el); el.removeAttribute('data-nobotty-dm'); }); return; }
     document.querySelectorAll(DM_SEL).forEach(function (el) {
       var text = (el.innerText || el.textContent || '').trim(); if (text.length < 4) return;
       var name = dmAuthor(el) || '';
-      if (name && cfg.trusted.indexOf(name.toLowerCase()) !== -1) { clear(el); el.removeAttribute('data-botless-dm'); return; }
+      if (name && cfg.trusted.indexOf(name.toLowerCase()) !== -1) { clear(el); el.removeAttribute('data-nobotty-dm'); return; }
       var info = name ? cache[name] : null; if (name && !info) want(name);
       var k = dmKind(text, info, name);
       var hide = k && ((k.kind === 'seller' && cfg.dmBlockSellers) || ((k.kind === 'scam' || k.kind === 'bot') && cfg.dmBlockBots));
-      if (!hide) { if (el.hasAttribute('data-botless-dm')) { clear(el); el.removeAttribute('data-botless-dm'); } return; }
-      el.setAttribute('data-botless-dm', k.kind);
-      el.setAttribute('data-botless', 'high');
-      el.setAttribute('data-botless-label', 'Botless hid a message (' + k.why + (name ? ' from u/' + name : '') + '). Click to ' + (el.hasAttribute('data-botless-open') ? 'hide' : 'show') + '.');
+      if (!hide) { if (el.hasAttribute('data-nobotty-dm')) { clear(el); el.removeAttribute('data-nobotty-dm'); } return; }
+      el.setAttribute('data-nobotty-dm', k.kind);
+      el.setAttribute('data-nobotty', 'high');
+      el.setAttribute('data-nobotty-label', 'Nobotty hid a message (' + k.why + (name ? ' from u/' + name : '') + '). Click to ' + (el.hasAttribute('data-nobotty-open') ? 'hide' : 'show') + '.');
     });
   }
 
@@ -164,7 +164,7 @@
   var pending = false;
   function evaluate() {
     evaluateDMs();
-    if (!cfg.enabled) { document.querySelectorAll('[data-botless]').forEach(clear); return; }
+    if (!cfg.enabled) { document.querySelectorAll('[data-nobotty]').forEach(clear); return; }
     var dups = duplicateMap();
     document.querySelectorAll(SEL).forEach(function (el) {
       var name = authorOf(el); if (!name) return;
@@ -174,20 +174,20 @@
       if (dups[normalize(textOf(el))]) { pts += 3; why.push('same text as another account'); }
       var lv = level(pts);
       if (lv === 'none' || (lv === 'medium' && !cfg.showMedium)) { clear(el); return; }
-      el.setAttribute('data-botless', lv);
-      el.setAttribute('data-botless-label', 'Botless: ' + lv + ' signals (' + why.join(', ') + '). Click to ' + (el.hasAttribute('data-botless-open') ? 'collapse' : 'show') + '.');
+      el.setAttribute('data-nobotty', lv);
+      el.setAttribute('data-nobotty-label', 'Nobotty: ' + lv + ' signals (' + why.join(', ') + '). Click to ' + (el.hasAttribute('data-nobotty-open') ? 'collapse' : 'show') + '.');
       el.setAttribute('title', 'Signals only, not proof. u/' + name);
-      if (lv === 'high' && !cfg.collapseHigh) el.setAttribute('data-botless-open', '1');
+      if (lv === 'high' && !cfg.collapseHigh) el.setAttribute('data-nobotty-open', '1');
     });
   }
-  function clear(el) { el.removeAttribute('data-botless'); el.removeAttribute('data-botless-label'); el.removeAttribute('data-botless-open'); }
+  function clear(el) { el.removeAttribute('data-nobotty'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); }
   function schedule() { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, 400); }
 
   /* click on the chip toggles the comment open/closed (the chip is a ::before, so use the host) */
   document.addEventListener('click', function (e) {
-    var el = e.target && e.target.closest && e.target.closest('[data-botless]'); if (!el) return;
+    var el = e.target && e.target.closest && e.target.closest('[data-nobotty]'); if (!el) return;
     var r = el.getBoundingClientRect(); if (e.clientY - r.top > 34) return; // only the label strip
-    if (el.hasAttribute('data-botless-open')) el.removeAttribute('data-botless-open'); else el.setAttribute('data-botless-open', '1');
+    if (el.hasAttribute('data-nobotty-open')) el.removeAttribute('data-nobotty-open'); else el.setAttribute('data-nobotty-open', '1');
     evaluate();
   }, true);
 
@@ -199,24 +199,24 @@
       new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
     });
   });
-  window.addEventListener('botless-config', function (e) { cfg = Object.assign({}, DEFAULTS, e.detail || {}); evaluate(); });
+  window.addEventListener('nobotty-config', function (e) { cfg = Object.assign({}, DEFAULTS, e.detail || {}); evaluate(); });
   if (hasChrome && chrome.storage.onChanged) chrome.storage.onChanged.addListener(function (ch) {
     if (ch.cfg) { cfg = Object.assign({}, DEFAULTS, ch.cfg.newValue || {}); evaluate(); }
   });
-  window.__botless = { dmKind: dmKind, evaluate: evaluate, level: level, accountSignals: accountSignals, textSignals: textSignals };
+  window.__nobotty = { dmKind: dmKind, evaluate: evaluate, level: level, accountSignals: accountSignals, textSignals: textSignals };
 })();
 
 
 /* ---- in-page settings (userscript build has no toolbar popup) ---- */
 (function () {
   var D = { enabled: true, collapseHigh: true, showMedium: true, trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true };
-  function load() { try { return Object.assign({}, D, JSON.parse(localStorage.getItem('botless:cfg')) || {}); } catch (e) { return Object.assign({}, D); } }
-  var btn = document.createElement('button'); btn.textContent = 'Botless'; btn.setAttribute('aria-label', 'Botless settings');
+  function load() { try { return Object.assign({}, D, JSON.parse(localStorage.getItem('nobotty:cfg')) || {}); } catch (e) { return Object.assign({}, D); } }
+  var btn = document.createElement('button'); btn.textContent = 'Nobotty'; btn.setAttribute('aria-label', 'Nobotty settings');
   btn.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483000;padding:8px 14px;border:0;border-radius:999px;background:#10231a;color:#f4f6ef;font:600 13px system-ui,sans-serif;cursor:pointer;opacity:.75';
   var box = document.createElement('div'); box.hidden = true;
   box.style.cssText = 'position:fixed;left:12px;bottom:52px;z-index:2147483000;width:290px;padding:14px;border-radius:16px;background:#f4f6ef;color:#10231a;font:14px/1.4 system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.35)';
   var rows = [['enabled','Turn on','Check comments and messages'],['collapseHigh','Collapse strong signals','One click on the label opens it'],['showMedium','Mark medium signals','Slightly dimmed, with a label'],['dmFilter','Filter direct messages','Hide scam and bot messages'],['dmBlockBots','Hide bots and scams','Crypto, add-me-on-Telegram, new accounts with links'],['dmBlockSellers','Hide sales pitches too','Turn off to receive offers']];
-  var c = load(), html = '<b style="font-size:16px">Botless</b><div style="color:#44584c;font-size:12px;margin:2px 0 8px">Signals, not proof. Runs on your device.</div>';
+  var c = load(), html = '<b style="font-size:16px">Nobotty</b><div style="color:#44584c;font-size:12px;margin:2px 0 8px">Signals, not proof. Runs on your device.</div>';
   rows.forEach(function (r) { html += '<label style="display:flex;gap:8px;padding:6px 0;border-top:1px solid #d5ddcf;cursor:pointer"><input type="checkbox" data-k="' + r[0] + '" style="margin-top:3px"' + (c[r[0]] ? ' checked' : '') + '><span>' + r[1] + '<small style="display:block;color:#5a6d60">' + r[2] + '</small></span></label>'; });
   html += '<div style="margin-top:8px"><b>Trusted accounts</b><small style="display:block;color:#5a6d60">One username per line</small><textarea data-k="trusted" style="width:100%;height:50px;box-sizing:border-box;margin-top:4px;border:1px solid #cdd7c8;border-radius:8px;padding:6px">' + c.trusted.join('\n') + '</textarea></div><button data-save style="margin-top:8px;width:100%;padding:9px;border:0;border-radius:999px;background:#e8693f;color:#10231a;font-weight:600;cursor:pointer">Save</button>';
   box.innerHTML = html;
@@ -224,7 +224,7 @@
   box.querySelector('[data-save]').onclick = function () {
     var n = load(); box.querySelectorAll('input[data-k]').forEach(function (i) { n[i.getAttribute('data-k')] = i.checked; });
     n.trusted = box.querySelector('textarea').value.split('\n').map(function (s) { return s.replace(/^u\//, '').trim().toLowerCase(); }).filter(Boolean);
-    localStorage.setItem('botless:cfg', JSON.stringify(n)); window.dispatchEvent(new CustomEvent('botless-config', { detail: n })); box.hidden = true;
+    localStorage.setItem('nobotty:cfg', JSON.stringify(n)); window.dispatchEvent(new CustomEvent('nobotty-config', { detail: n })); box.hidden = true;
   };
   document.body.appendChild(btn); document.body.appendChild(box);
 })();

@@ -1,4 +1,4 @@
-// Userscript build: loads botless.user.js into a mock inbox and drives the in-page settings panel.
+// Userscript build: loads nobotty.user.js into a mock inbox and drives the in-page settings panel.
 const {chromium}=require('playwright');
 const fs=require('fs'),path=require('path');
 (async()=>{
@@ -16,13 +16,13 @@ const fs=require('fs'),path=require('path');
    if(u.includes('about.json')){const n=decodeURIComponent(u.split('/user/')[1].split('/')[0]);const x=ACC[n];return r.fulfill(x?{status:200,contentType:'application/json',body:JSON.stringify({data:{created_utc:x.created,total_karma:x.karma}})}:{status:404,body:'{}'})}
    return r.fulfill({status:200,contentType:'text/html; charset=utf-8',body:html})});
  await pg.goto('https://old.reddit.com/message/inbox');
- await pg.addScriptTag({content:fs.readFileSync(path.join(__dirname,'..','userscript','botless.user.js'),'utf8')});
- const state=()=>pg.evaluate(()=>[...document.querySelectorAll('.thing.message')].map(e=>e.getAttribute('data-author')+'='+(e.getAttribute('data-botless-dm')||'shown')).join(', '));
+ await pg.addScriptTag({content:fs.readFileSync(path.join(__dirname,'..','userscript','nobotty.user.js'),'utf8')});
+ const state=()=>pg.evaluate(()=>[...document.querySelectorAll('.thing.message')].map(e=>e.getAttribute('data-author')+'='+(e.getAttribute('data-nobotty-dm')||'shown')).join(', '));
  await pg.waitForTimeout(4500);console.log('default       :',await state());
- await pg.click('button[aria-label="Botless settings"]');
+ await pg.click('button[aria-label="Nobotty settings"]');
  await pg.uncheck('input[data-k="dmBlockSellers"]');await pg.click('[data-save]');await pg.waitForTimeout(500);
  console.log('sellers off   :',await state());
- await pg.click('button[aria-label="Botless settings"]');
+ await pg.click('button[aria-label="Nobotty settings"]');
  await pg.check('input[data-k="dmBlockSellers"]');await pg.click('[data-save]');await pg.waitForTimeout(500);
  console.log('sellers on    :',await state());
  await pg.screenshot({path:'test_userscript.png'});

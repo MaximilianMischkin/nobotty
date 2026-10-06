@@ -17,14 +17,14 @@ const fs=require('fs');
  await pg.route('https://www.reddit.com/**',r=>r.fulfill({status:200,contentType:'text/html',body:html}));
  await pg.goto('https://www.reddit.com/r/test/comments/x/');
  await pg.addInitScript(()=>{});
- await pg.evaluate(a=>{window.__BOTLESS_FETCH=u=>{const n=decodeURIComponent(u.split('/user/')[1].split('/')[0]);const x=a[n];return Promise.resolve(x?{ok:true,status:200,json:()=>Promise.resolve({data:{created_utc:x.created,total_karma:x.karma}})}:{ok:false,status:404})};localStorage.setItem('botless:cfg',JSON.stringify({enabled:true,collapseHigh:true,showMedium:true,trusted:['trusty']}))},ACC);
+ await pg.evaluate(a=>{window.__NOBOTTY_FETCH=u=>{const n=decodeURIComponent(u.split('/user/')[1].split('/')[0]);const x=a[n];return Promise.resolve(x?{ok:true,status:200,json:()=>Promise.resolve({data:{created_utc:x.created,total_karma:x.karma}})}:{ok:false,status:404})};localStorage.setItem('nobotty:cfg',JSON.stringify({enabled:true,collapseHigh:true,showMedium:true,trusted:['trusty']}))},ACC);
  await pg.addStyleTag({content:fs.readFileSync('content.css','utf8')});
  await pg.addScriptTag({content:fs.readFileSync('content.js','utf8')});
  await pg.waitForTimeout(9500);
- const res=await pg.evaluate(()=>[...document.querySelectorAll('shreddit-comment,.thing.comment')].map(e=>({a:e.getAttribute('author')||e.getAttribute('data-author'),lv:e.getAttribute('data-botless'),label:(e.getAttribute('data-botless-label')||'').slice(0,150)})));
+ const res=await pg.evaluate(()=>[...document.querySelectorAll('shreddit-comment,.thing.comment')].map(e=>({a:e.getAttribute('author')||e.getAttribute('data-author'),lv:e.getAttribute('data-nobotty'),label:(e.getAttribute('data-nobotty-label')||'').slice(0,150)})));
  console.log(JSON.stringify(res,null,1));
  await pg.screenshot({path:'test_shot.png'});
  // click expand test on the high one
  await pg.mouse.click(120,30);await pg.waitForTimeout(300);
- console.log('open after click:',await pg.evaluate(()=>document.querySelector('[data-botless="high"]')?.hasAttribute('data-botless-open')));
+ console.log('open after click:',await pg.evaluate(()=>document.querySelector('[data-nobotty="high"]')?.hasAttribute('data-nobotty-open')));
  await b.close();})();

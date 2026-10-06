@@ -13,11 +13,11 @@ async function run(cfg){
   msg('old_friend',"Hey, are we still on for Saturday? Bring the camera.")+`</body>`;
  await pg.route('https://old.reddit.com/**',r=>r.fulfill({status:200,contentType:'text/html; charset=utf-8',body:html}));
  await pg.goto('https://old.reddit.com/message/inbox');
- await pg.evaluate(([a,c])=>{window.__BOTLESS_FETCH=u=>{const n=decodeURIComponent(u.split('/user/')[1].split('/')[0]);const x=a[n];return Promise.resolve(x?{ok:true,status:200,json:()=>Promise.resolve({data:{created_utc:x.created,total_karma:x.karma}})}:{ok:false,status:404})};localStorage.setItem('botless:cfg',JSON.stringify(c))},[ACC,cfg]);
+ await pg.evaluate(([a,c])=>{window.__NOBOTTY_FETCH=u=>{const n=decodeURIComponent(u.split('/user/')[1].split('/')[0]);const x=a[n];return Promise.resolve(x?{ok:true,status:200,json:()=>Promise.resolve({data:{created_utc:x.created,total_karma:x.karma}})}:{ok:false,status:404})};localStorage.setItem('nobotty:cfg',JSON.stringify(c))},[ACC,cfg]);
  await pg.addStyleTag({content:fs.readFileSync('content.css','utf8')});
  await pg.addScriptTag({content:fs.readFileSync('content.js','utf8')});
  await pg.waitForTimeout(6500);
- const res=await pg.evaluate(()=>[...document.querySelectorAll('.thing.message')].map(e=>e.getAttribute('data-author')+' => '+(e.getAttribute('data-botless-dm')||'shown')));
+ const res=await pg.evaluate(()=>[...document.querySelectorAll('.thing.message')].map(e=>e.getAttribute('data-author')+' => '+(e.getAttribute('data-nobotty-dm')||'shown')));
  console.log(JSON.stringify(cfg).slice(0,110),'\n  ',res.join('\n   '));
  if(cfg.dmBlockSellers&&cfg.dmFilter)await pg.screenshot({path:'test_dm.png'});
  await b.close();}

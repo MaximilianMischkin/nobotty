@@ -1,8 +1,8 @@
-# Botless
+# Nobotty
 
-**Spot likely bots, scams and sales pitches on Reddit.** Botless is a small browser extension that puts a label on comments from very new or low-karma accounts, hides scam and bot direct messages, and lets you choose whether sales pitches are hidden too. One click opens anything it collapsed.
+**Spot likely bots, scams and sales pitches on Reddit.** Nobotty is a small browser extension that puts a label on comments from very new or low-karma accounts, hides scam and bot direct messages, and lets you choose whether sales pitches are hidden too. One click opens anything it collapsed.
 
-It gives signals, not proof. A new account can be a real person, so Botless only labels and collapses. It never deletes or blocks.
+It gives signals, not proof. A new account can be a real person, so Nobotty only labels and collapses. It never deletes or blocks.
 
 Everything runs in your browser. No tracking, no server, no accounts. See [PRIVACY.md](PRIVACY.md).
 
@@ -25,13 +25,13 @@ Open `about:debugging#/runtime/this-firefox`, click Load Temporary Add-on and ch
 ### Safari (no Xcode needed): userscript
 Safari cannot load an extension folder, but it runs userscripts through a free app.
 1. Install **Userscripts** from the Mac App Store (free, open source) and enable it in Safari Settings, Extensions. Choose a folder for your scripts when it asks.
-2. Copy [`userscript/botless.user.js`](userscript/botless.user.js) into that folder.
-3. Open Reddit. A small **Botless** button appears at the bottom left. It opens the settings (turn on, collapse strong signals, direct message filter, hide bots and scams, **hide sales pitches too**, trusted accounts).
+2. Copy [`userscript/nobotty.user.js`](userscript/nobotty.user.js) into that folder.
+3. Open Reddit. A small **Nobotty** button appears at the bottom left. It opens the settings (turn on, collapse strong signals, direct message filter, hide bots and scams, **hide sales pitches too**, trusted accounts).
 
 The userscript build has the same detection as the extension. It was tested against a mock inbox, not live Reddit.
 
 ### Safari as a full extension (needs Xcode)
-Install Xcode, then run `xcrun safari-web-extension-converter /path/to/botless`, build and run the generated app and enable it in Safari Settings, Extensions (during development also Develop, Allow Unsigned Extensions). Shipping it on the App Store needs an Apple developer account.
+Install Xcode, then run `xcrun safari-web-extension-converter /path/to/nobotty`, build and run the generated app and enable it in Safari Settings, Extensions (during development also Develop, Allow Unsigned Extensions). Shipping it on the App Store needs an Apple developer account.
 
 ## How it decides
 
@@ -49,7 +49,7 @@ Comments: account age and karma (from Reddit's public `about.json`, cached for 7
 npm install
 npx playwright install chromium
 npm test
-npm run build   # regenerates userscript/botless.user.js
+npm run build   # regenerates userscript/nobotty.user.js
 ```
 
 The tests load the content script into a mock comment page and a mock inbox and check which items get labelled.
