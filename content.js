@@ -7,7 +7,13 @@
   var cache = {};              // name -> {t, created, karma, err}
   var queue = [], queued = {}; // fetch queue (1 request per ~1.1 s)
   var running = false, backoffUntil = 0;
-  var doFetch = function (u) { return (window.__NOBOTTY_FETCH || fetch)(u, { credentials: 'same-origin' }); };
+  var doFetch = function (u) {
+    var f = window.__NOBOTTY_FETCH || window.fetch.bind(window);
+    var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, 8000) : null;
+    var p = f(u, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: ctl ? ctl.signal : undefined });
+    return p.then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });
+  };
 
   /* ---- storage with a tiny fallback so it can be tested outside an extension ---- */
   var hasChrome = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
@@ -77,7 +83,7 @@
     var now = Date.now(); Object.keys(cache).forEach(function (k) { if (now - cache[k].t > TTL) delete cache[k]; });
     sSet({ acct: cache }); }, 1500); }
   function want(name) {
-    var c = cache[name]; if (c && Date.now() - c.t < TTL) return;
+    var c = cache[name]; if (c && Date.now() - c.t < (c.err ? 60000 : TTL)) return;
     if (queued[name]) return; queued[name] = 1; queue.push(name); pump();
   }
   function pump() {
@@ -95,7 +101,13 @@
           if (j && j.data) cache[name] = { t: Date.now(), created: j.data.created_utc, karma: (j.data.total_karma != null ? j.data.total_karma : (j.data.link_karma || 0) + (j.data.comment_karma || 0)) };
           saveCache(); evaluate();
         })
-        .catch(function () {})
+        .catch(function (e) {
+          if (e && e.message === 'rate') return;
+          var msg = e && e.name === 'AbortError' ? 'timeout' : String((e && e.message) || e).slice(0, 60);
+          cache[name] = { t: Date.now(), err: msg };
+          try { console.warn('[Nobotty] lookup failed for ' + name + ':', e); } catch (x) {}
+          evaluate();
+        })
         .then(function () { running = false; setTimeout(pump, 1100); });
     }, wait);
   }
@@ -179,7 +191,7 @@
       stats.seen++;
       var name = authorOf(el); if (!name) return;
       stats.withAuthor++;
-      var ci = cache[name]; if (ci && !ci.err) stats.checked++; else if (ci && ci.err) { stats.failed++; stats.lastErr = 'HTTP ' + ci.err; }
+      var ci = cache[name]; if (ci && !ci.err) stats.checked++; else if (ci && ci.err) { stats.failed++; stats.lastErr = (typeof ci.err === 'number' ? 'HTTP ' + ci.err : ci.err); }
       if (cfg.trusted.indexOf(name.toLowerCase()) !== -1) { clear(el); return; }
       var info = cache[name]; if (!info) want(name);
       var a = accountSignals(info, name), t = textSignals(textOf(el)), pts = a.pts + t.pts, why = a.why.concat(t.why);
