@@ -8,9 +8,11 @@ Everything runs in your browser. No tracking, no server, no accounts. See [PRIVA
 
 ## What it does
 
-- **Comments:** labels accounts that are days old or have little karma, with the reason shown. Flags the same text posted by two different accounts in one thread. Strong signals collapse to one line.
+- **Colour stripe, no clutter.** Every checked comment gets a thin stripe on its left edge: **red** = low trust, **orange** = medium, **green** = good. No labels, no extra rows. Optional: collapse red comments to one line, show the reason as a tooltip.
+- **History check.** For suspicious accounts Nobotty also reads the account's last ~40 public posts and comments (locally, nothing is sent anywhere) and looks for bot patterns: shortened or link-hub URLs, the same link or text repeated, bursts of posts within minutes, spreading across many subreddits.
 - **Direct messages:** hides scam and bot messages (crypto, "add me on Telegram", new accounts that send links). Sales pitches ("I can build your website", SEO offers, free audits) have their own switch.
-- **Settings:** turn it on or off, collapse strong signals, mark medium signals, DM filter, hide bots and scams, hide sales pitches, and a list of trusted accounts that are never marked.
+- **Fast and polite:** four lookups in parallel, what you see first, and it spaces requests to stay inside Reddit's rate limit. Results are cached for 7 days.
+- **Settings:** each colour can be turned off, collapse red comments, history check for every account, reasons on hover, DM filter and the sales-pitch switch, trusted accounts that are never marked.
 
 ## Install
 
@@ -35,7 +37,7 @@ Install Xcode, then run `xcrun safari-web-extension-converter /path/to/nobotty`,
 
 ## How it decides
 
-Comments: account age and karma (from Reddit's public `about.json`, cached for 7 days, one request per second), auto-style usernames, identical text from two accounts, and stock phrases. Direct messages: scam patterns, sales-pitch patterns and new accounts that send links. The patterns are plain regular expressions in `content.js`, so you can read and change them.
+Comments: account age and karma (Reddit's public `about.json`), auto-style usernames, identical text from two accounts, stock phrases, and (for suspicious accounts) the posting history described above. Points add up: 5 or more is red, 3 or 4 is orange, 0 or 1 with a known account is green. Direct messages: scam patterns, sales-pitch patterns and new accounts that send links. The patterns are plain regular expressions in `content.js`, so you can read and change them.
 
 ## Known limits
 

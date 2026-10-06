@@ -1,9 +1,13 @@
-/* Nobotty: styles live on the comment host element so they work with Reddit's shadow DOM. */
+/* Nobotty: a colour stripe on the comment host element (works with Reddit's shadow DOM).
+   red = low trust, orange = medium, green = good. */
 [data-nobotty]{position:relative}
-[data-nobotty="medium"]{box-shadow:inset 2px 0 0 rgba(217,102,63,.5);opacity:.85}
-[data-nobotty="high"]{box-shadow:inset 2px 0 0 #d9663f}
-[data-nobotty="high"]::before,[data-nobotty-tag]::before{
+[data-nobotty="low"]{box-shadow:inset 3px 0 0 #e5484d}
+[data-nobotty="medium"]{box-shadow:inset 3px 0 0 #f0a030}
+[data-nobotty="good"]{box-shadow:inset 3px 0 0 #3fb26b}
+/* optional one-line collapse (low trust comments, or hidden direct messages) */
+[data-nobotty-collapse]:not([data-nobotty-open]),[data-nobotty-dm]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}
+[data-nobotty-collapse]::before,[data-nobotty-dm]::before{
   content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;
-  color:#d9663f;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-[data-nobotty="high"]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}
+  color:#e5484d;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+[data-nobotty-dm]{box-shadow:inset 3px 0 0 #e5484d}
 @media (prefers-reduced-motion:no-preference){[data-nobotty]{transition:opacity 160ms cubic-bezier(.23,1,.32,1)}}
