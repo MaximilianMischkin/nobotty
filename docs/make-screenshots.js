@@ -60,53 +60,65 @@ async function inject(pg){
  await pp.addInitScript(()=>{window.chrome={storage:{local:{get:(k,cb)=>cb({}),set:(o,cb)=>cb&&cb()}}}});
  await pp.goto('file://'+path.join(root,'popup.html'));await pp.waitForTimeout(300);
  await pp.screenshot({path:path.join(__dirname,'settings.png'),fullPage:true});
- // hero
+ // A browser window around a thread, used by the hero image and the video (looks like a real screen, no marketing layout)
+ const C2=C.concat([
+  {u:'sam_k_dev',av:'#14b8a6',t:'58m',txt:'Posting in small Slack groups worked better for us than Reddit ads. Took a while though.',kids:[
+    {u:'Quick-Otter-77',av:'#e879f9',t:'40m',txt:'Interested',kids:[]}]},
+  {u:'jen_builds',av:'#f97316',t:'31m',txt:'Our first five came from people who found an old blog post. Writing things down pays off later.',kids:[]}]);
+ Object.assign(A,{sam_k_dev:{c:now-900*D,k:4200},'Quick-Otter-77':{c:now-2*D,k:1},jen_builds:{c:now-1800*D,k:12000}});
+ const FRAME=`
+  .win{position:absolute;border-radius:12px;overflow:hidden;background:#0e1113;box-shadow:0 0 0 1px #2b3236,0 24px 70px rgba(0,0,0,.55)}
+  .bar{height:40px;background:#1c2125;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid #2b3236}
+  .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
+  .url{margin-left:18px;flex:1;height:26px;border-radius:7px;background:#121619;color:#9aa6ad;font:13px/26px system-ui;padding:0 12px}
+  .ext{width:22px;height:22px;border-radius:6px;background:#10231a;display:flex;align-items:center;justify-content:center}
+  .ext b{width:8px;height:8px;border-radius:50%;background:#4fc08d}
+  .view{position:absolute;top:41px;left:0;right:0;bottom:0;overflow:hidden}
+  .view .wrap{max-width:760px;margin:0 auto;padding:26px 28px 400px}`;
+ const bar=`<div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><div class="url">reddit.com/r/startups/comments/1x8k2q/where_did_your_first_customers_come_from/</div><div class="ext"><b></b></div></div>`;
+ // hero: one clean browser window, the dots doing the talking
  const hp=await b.newPage({viewport:{width:1600,height:900},deviceScaleFactor:1});
- const img=n=>'data:image/png;base64,'+fs.readFileSync(path.join(__dirname,n+'.png')).toString('base64');
- await hp.setContent(`<style>body{margin:0;width:1600px;height:900px;background:#0f1a14;color:#f4f6ef;font-family:system-ui,-apple-system,sans-serif;position:relative;overflow:hidden}
- h1{position:absolute;left:70px;top:44px;margin:0;font:600 54px/1.05 system-ui;letter-spacing:-.02em}
- p{position:absolute;left:72px;top:118px;margin:0;font:400 24px system-ui;color:#b9c8bd}
- .card{position:absolute;top:190px;width:720px;height:530px;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45)}
- .card img{width:720px;display:block}
- .l{left:70px}.r{left:810px}
- .tag{position:absolute;top:745px;font:600 22px system-ui;color:#b9c8bd}
- .key{position:absolute;left:810px;top:800px;font:500 22px system-ui;color:#f4f6ef;display:flex;gap:26px;align-items:center}.key i{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:8px;vertical-align:-1px}
- </style><h1>Nobotty</h1><p>A small dot after each comment shows which Reddit accounts to trust.</p>
- <div class="card l"><img src="${img('before')}"></div><div class="card r"><img src="${img('after')}"></div>
- <div class="tag" style="left:72px">Before</div><div class="tag" style="left:812px">With Nobotty</div>
- <div class="key"><span><i style="background:#f0646b"></i>low trust</span><span><i style="background:#f3b04e"></i>medium</span><span><i style="background:#4fc08d"></i>good</span></div>`);
- await hp.waitForTimeout(400);
+ await hp.route('https://www.reddit.com/**',r=>r.fulfill({status:200,contentType:'text/html; charset=utf-8',body:`<!doctype html><meta charset="utf-8"><style>${CSS}${FRAME}
+  body{background:#15191c;font-size:15px}
+  .t{position:absolute;left:120px;top:56px;color:#f2f4f5;font:600 30px system-ui;letter-spacing:-.01em}
+  .s{position:absolute;left:120px;top:98px;color:#9aa6ad;font:400 19px system-ui}
+  .s i{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 6px 0 14px;vertical-align:0}
+ </style><body><div class="t">Nobotty</div><div class="s">a small dot after every Reddit comment<i style="background:#f0646b"></i>low trust<i style="background:#f3b04e"></i>medium<i style="background:#4fc08d"></i>good</div>
+ <div class="win" style="left:120px;top:150px;width:1360px;height:690px">${bar}<div class="view"><div class="wrap"><h4>Where did your first customers come from?</h4>${C2.map(comment).join('')}</div></div></div></body>`}));
+ await hp.goto(URL);await stub(hp,0);await inject(hp);await hp.waitForTimeout(3500);
  await hp.screenshot({path:path.join(__dirname,'hero.png')});
- // demo video: thread loads, dots pop in one by one, captions explain, end card with the link
+ // video: a plain screen recording. Thread is there, dots appear, it scrolls, the cursor checks a red one, then the link.
  const ctx=await b.newContext({viewport:{width:1280,height:720},recordVideo:{dir:__dirname,size:{width:1280,height:720}}});
  const vp=await ctx.newPage();
- const vpage=`<!doctype html><meta charset="utf-8"><style>${CSS}
-  body{background:#0b0f10;font-size:15px}.wrap{position:absolute;left:440px;top:36px;width:740px;padding:22px 28px;background:#0e1113;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-  .side{position:absolute;left:50px;top:70px;width:360px;color:#f4f6ef}
-  .side h1{font:650 46px/1.05 system-ui;margin:0 0 18px;letter-spacing:-.02em}
-  .cap{font:500 25px/1.35 system-ui;color:#c9d6cd;min-height:150px;transition:opacity .35s}
-  .key{margin-top:26px;font:500 19px system-ui;display:grid;gap:12px}.key i{display:inline-block;width:13px;height:13px;border-radius:50%;margin-right:10px}
-  .end{position:fixed;inset:0;background:#0f1a14;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;transition:opacity .6s;color:#f4f6ef}
+ const vpage=`<!doctype html><meta charset="utf-8"><style>${CSS}${FRAME}
+  body{background:#15191c;font-size:15px;overflow:hidden}
+  .cur{position:fixed;left:0;top:0;width:20px;height:20px;z-index:9;transition:transform 1.1s cubic-bezier(.45,.05,.25,1);transform:translate(900px,560px);pointer-events:none}
   .tick{position:fixed;right:0;bottom:0;width:2px;height:2px;animation:tick 1s steps(30) infinite}
-  @keyframes tick{from{background:#0b0f10}to{background:#0c1011}}
-  .end h1{font:650 64px system-ui;margin:0 0 12px;letter-spacing:-.02em}.end p{font:400 26px system-ui;color:#b9c8bd;margin:6px}
- </style><body><div class="side"><h1>Nobotty</h1><div class="cap" id="cap">Reddit threads are full of bots and sales pitches.</div>
- <div class="key"><span><i style="background:#f0646b"></i>low trust</span><span><i style="background:#f3b04e"></i>medium</span><span><i style="background:#4fc08d"></i>good</span></div></div>
- <div class="wrap"><h4>Where did your first customers come from?</h4>${C.map(comment).join('')}</div>
- <div class="tick"></div><div class="end" id="end"><h1>Nobotty</h1><p>Free and open source · Firefox, Chrome, Safari</p><p>github.com/MaximilianMischkin/nobotty</p></div></body>`;
+  @keyframes tick{from{background:#15191c}to{background:#161a1d}}
+  .end{position:fixed;inset:0;background:#15191c;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;transition:opacity .5s;color:#f2f4f5;font:400 22px system-ui;gap:10px}
+  .end b{font:600 30px system-ui}.end span{color:#9aa6ad}
+ </style><body><div class="win" style="left:0;top:0;right:0;bottom:0;border-radius:0">${bar}<div class="view" id="view"><div class="wrap"><h4>Where did your first customers come from?</h4>${C2.map(comment).join('')}</div></div></div>
+ <svg class="cur" id="cur" viewBox="0 0 20 20"><path d="M3 2 L3 16 L7 12.5 L9.6 18 L12 17 L9.5 11.6 L15 11.4 Z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/></svg>
+ <div class="tick"></div><div class="end" id="end"><b>Nobotty</b><span>free, open source</span><div>github.com/MaximilianMischkin/nobotty</div></div></body>`;
  await vp.route('https://www.reddit.com/**',r=>r.fulfill({status:200,contentType:'text/html; charset=utf-8',body:vpage}));
  await vp.goto(URL);
- const cap=t=>vp.evaluate(t=>{const c=document.getElementById('cap');c.style.opacity=0;setTimeout(()=>{c.textContent=t;c.style.opacity=1;},350);},t);
- await vp.waitForTimeout(2200);
- await cap('Nobotty checks each account: age, karma, copied text and, if it looks off, its posting history.');
- await stub(vp,450);await inject(vp);
- await vp.waitForTimeout(3600);
- await cap('A small dot after the time. Red for low trust, green for real people. Nothing else changes.');
- await vp.waitForTimeout(3600);
- await cap('It also hides bot and sales-pitch DMs. Everything runs on your device.');
- await vp.waitForTimeout(3200);
+ const move=(x,y)=>vp.evaluate(([x,y])=>document.getElementById('cur').style.transform=`translate(${x}px,${y}px)`,[x,y]);
+ const dotAt=n=>vp.evaluate(n=>{const c=[...document.querySelectorAll('shreddit-comment')].find(e=>e.getAttribute('author')===n);const d=c&&c.querySelector('.nobotty-dot');const r=d&&d.getBoundingClientRect();return r?[r.left+2,r.top+2]:[700,400];},n);
+ const scroll=(y,ms)=>vp.evaluate(([y,ms])=>{const v=document.getElementById('view'),s=v.scrollTop,t0=performance.now();
+   (function f(t){const k=Math.min(1,(t-t0)/ms),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;v.scrollTop=s+(y-s)*e;if(k<1)requestAnimationFrame(f);})(t0);},[y,ms]);
+ await vp.waitForTimeout(900);
+ await move(760,300);
+ await vp.waitForTimeout(700);
+ await stub(vp,380);await inject(vp);
+ await vp.waitForTimeout(2600);
+ let [x,y]=await dotAt('Fresh-Panda-4821');await move(x,y);
+ await vp.waitForTimeout(1700);
+ await move(1000,420);await scroll(330,2200);
+ await vp.waitForTimeout(2600);
+ [x,y]=await dotAt('Quick-Otter-77');await move(x,y);
+ await vp.waitForTimeout(1900);
  await vp.evaluate(()=>document.getElementById('end').style.opacity=1);
- await vp.waitForTimeout(3000);
+ await vp.waitForTimeout(2600);
  const vpath=await vp.video().path();await ctx.close();
  fs.renameSync(vpath,path.join(__dirname,'demo.webm'));
  await b.close();})();
