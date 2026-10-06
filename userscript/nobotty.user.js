@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nobotty
 // @namespace    https://github.com/MaximilianMischkin/nobotty
-// @version      0.3.1
+// @version      0.4.1
 // @description  Spot likely bots, scams and sales pitches on Reddit. Runs locally.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -9,7 +9,7 @@
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
-(function(){var st=document.createElement('style');st.textContent="/* Nobotty: a small colour dot at each checked account's avatar (works with Reddit's shadow DOM).\n   red = low trust, orange = medium, green = good. Optional: a thin stripe instead (setting \"Use a stripe\"). */\n[data-nobotty]{position:relative;--nb-c:transparent}\n[data-nobotty=\"low\"]{--nb-c:#f0646b}\n[data-nobotty=\"medium\"]{--nb-c:#f3b04e}\n[data-nobotty=\"good\"]{--nb-c:#4fc08d}\n/* dot (default) */\n[data-nobotty]::after{content:\"\";position:absolute;left:var(--nb-dx,-16px);top:var(--nb-dy,8px);width:10px;height:10px;box-sizing:border-box;border-radius:50%;\n  background:var(--nb-c);pointer-events:none;z-index:1}\n/* stripe (option) */\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty]::after{left:-10px;top:3px;width:3px;height:calc(var(--nb-h, 100%) - 6px);border-radius:3px;box-shadow:none;opacity:.9}\n@keyframes nobotty-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}\n@media (prefers-reduced-motion:no-preference){[data-nobotty]::after{animation:nobotty-pop 220ms cubic-bezier(.23,1,.32,1)}}\n/* optional one-line collapse (low trust comments, or hidden direct messages) */\n[data-nobotty-collapse]:not([data-nobotty-open]),[data-nobotty-dm]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}\n[data-nobotty-collapse]::before,[data-nobotty-dm]::before{\n  content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;\n  color:#f0646b;padding:0 8px 0 20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}\n[data-nobotty-collapse]::after,[data-nobotty-dm]::after,\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty-collapse]::after,html[data-nobotty-style=\"stripe\"] [data-nobotty-dm]::after{left:6px;top:5px;width:10px;height:10px;border-radius:50%;box-shadow:none}\n[data-nobotty-dm]{--nb-c:#f0646b}\n[data-nobotty-dm]::after{content:\"\";position:absolute;background:var(--nb-c);pointer-events:none;z-index:2}\n";document.head.appendChild(st);})();
+(function(){var st=document.createElement('style');st.textContent="/* Nobotty: a small colour dot right after each comment's time (\"4d ago (dot)\").\n   red = low trust, orange = medium, green = good. Optional: a thin stripe instead (setting \"Use a stripe\"). */\n[data-nobotty]{position:relative;--nb-c:transparent}\n[data-nobotty=\"low\"]{--nb-c:#f0646b}\n[data-nobotty=\"medium\"]{--nb-c:#f3b04e}\n[data-nobotty=\"good\"]{--nb-c:#4fc08d}\n/* dot (default): inline element after the time */\n.nobotty-dot{display:inline-block;width:9px;height:9px;margin:0 0 0 7px;border-radius:50%;vertical-align:middle;position:relative;top:-1px;flex:none;pointer-events:none;background:transparent}\n.nobotty-dot[data-lv=\"low\"]{background:#f0646b}\n.nobotty-dot[data-lv=\"medium\"]{background:#f3b04e}\n.nobotty-dot[data-lv=\"good\"]{background:#4fc08d}\n@keyframes nobotty-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}\n@media (prefers-reduced-motion:no-preference){.nobotty-dot{animation:nobotty-pop 220ms cubic-bezier(.23,1,.32,1)}}\n/* stripe (option) */\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty]::after{content:\"\";position:absolute;left:-10px;top:3px;width:3px;height:calc(var(--nb-h, 100%) - 6px);border-radius:3px;background:var(--nb-c);pointer-events:none;opacity:.9}\n/* optional one-line collapse (low trust comments, or hidden direct messages) */\n[data-nobotty-collapse]:not([data-nobotty-open]),[data-nobotty-dm]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}\n[data-nobotty-collapse]::before,[data-nobotty-dm]::before{\n  content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;\n  color:#f0646b;padding:0 8px 0 20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}\n[data-nobotty-collapse]::after,[data-nobotty-dm]::after,\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty-collapse]::after,html[data-nobotty-style=\"stripe\"] [data-nobotty-dm]::after{content:\"\";position:absolute;background:var(--nb-c);pointer-events:none;left:6px;top:5px;width:10px;height:10px;border-radius:50%;box-shadow:none}\n[data-nobotty-dm]{--nb-c:#f0646b}\n[data-nobotty-dm]::after{content:\"\";position:absolute;background:var(--nb-c);pointer-events:none;z-index:2}\n";document.head.appendChild(st);})();
 /* Nobotty content script. Local only: reads the page and public account info, shows a colour stripe per comment. */
 (function () {
   'use strict';
@@ -173,6 +173,50 @@
     if (prio[key] === undefined || d < prio[key]) prio[key] = d + (kind === 'h' ? 5000 : 0);
     if (queued[key]) return; queued[key] = 1; queue.push({ k: kind, n: name }); pump();
   }
+
+  /* Bulk lookup: one request for the thread's comment tree (gives every author's account id),
+     then one request per 100 accounts. Replaces ~1 request per account, which ran into Reddit's limit. */
+  var thread = { id: null, at: 0, busy: false, ids: {} };
+  function getJSON(path) {
+    if (rt && !window.__NOBOTTY_FETCH) return withTimeout(Promise.resolve(rt.sendMessage({ type: 'nobotty-get', path: path })), 15000, 'background not responding');
+    return pageFetch(path);
+  }
+  function collectAuthors(node, out) {
+    if (!node) return;
+    if (Array.isArray(node)) { node.forEach(function (n) { collectAuthors(n, out); }); return; }
+    var d = node.data; if (!d) return;
+    if (d.children) collectAuthors(d.children, out);
+    if (d.author && d.author_fullname && d.author !== '[deleted]') out[d.author] = d.author_fullname;
+    if (d.replies) collectAuthors(d.replies, out);
+  }
+  function bulkPrefetch(unknown) {
+    var m = location.pathname.match(/\/comments\/([a-z0-9]{3,12})/i); if (!m || thread.busy) return;
+    var id = m[1].toLowerCase(), now = Date.now();
+    if (thread.id === id && (unknown < 3 || now - thread.at < 30000)) return;
+    thread.busy = true; thread.id = id; thread.at = now;
+    getJSON('/comments/' + id + '.json?limit=500&depth=12&raw_json=1').then(function (r) {
+      noteLimit(r && r.rl);
+      if (!r || !r.ok) throw new Error('thread ' + ((r && (r.status || r.error)) || 'failed'));
+      var map = {}; collectAuthors(r.data, map);
+      var need = Object.keys(map).filter(function (n) { var c = cache[n]; return !c || c.err || Date.now() - c.t > TTL; });
+      var ids = need.map(function (n) { return map[n]; }), chunks = [];
+      for (var i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+      return chunks.reduce(function (p, ch) {
+        return p.then(function () { return getJSON('/api/user_data_by_account_ids.json?ids=' + ch.join(',')); }).then(function (u) {
+          noteLimit(u && u.rl); if (!u || !u.ok || !u.data) return;
+          Object.keys(u.data).forEach(function (k) {
+            var a = u.data[k]; if (!a || !a.name) return;
+            cache[a.name] = { t: Date.now(), created: a.created_utc, karma: (a.link_karma || 0) + (a.comment_karma || 0) };
+          });
+        });
+      }, Promise.resolve());
+    }).catch(function (e) { try { console.warn('[Nobotty] bulk lookup failed:', e); } catch (x) {} })
+      .then(function () {
+        thread.busy = false;
+        for (var i = queue.length - 1; i >= 0; i--) { var j = queue[i]; if (j.k === 'a' && cache[j.n] && !cache[j.n].err) { delete queued[j.k + ':' + j.n]; queue.splice(i, 1); } }
+        saveCache(); drawChip(); schedule(50);
+      });
+  }
   function nextJob() {
     var bi = 0, bp = Infinity;
     for (var i = 0; i < queue.length; i++) { var p = prio[queue[i].k + ':' + queue[i].n]; if (p === undefined) p = 1e9; if (p < bp) { bp = p; bi = i; } }
@@ -187,8 +231,18 @@
     limit = { remaining: rl.remaining, reset: rl.reset };
     if (rl.remaining <= 2) backoffUntil = Math.max(backoffUntil, Date.now() + Math.min(600, rl.reset || 30) * 1000);
   }
+  /* Watchdog: if jobs wait but nothing runs (timer chain broke, background was suspended), restart the pump. */
+  setInterval(function () {
+    if (!queue.length) return;
+    if (inflight > 0 && Date.now() - lastStart > 30000) inflight = 0;
+    if (inflight === 0 && !pumpTimer) pump();
+    else if (!pumpTimer && inflight < MAXC && Date.now() - lastStart > 5000) pump();
+    schedule(100);
+  }, 3000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { pump(); schedule(100); } });
   function pump() {
     if (inflight >= MAXC || !queue.length) return;
+    if (thread.busy) { if (!pumpTimer) pumpTimer = setTimeout(function () { pumpTimer = null; pump(); }, 500); return; }
     var now = Date.now(), wait = Math.max(0, backoffUntil - now, lastStart + spacing() - now);
     if (wait > 0) { if (!pumpTimer) pumpTimer = setTimeout(function () { pumpTimer = null; pump(); }, Math.min(wait, 1000)); return; }
     var job = nextJob(), key = job.k + ':' + job.n; delete queued[key]; inflight++; lastStart = Date.now();
@@ -281,7 +335,7 @@
     var txt;
     if (waiting || bad || stats.failed || paused) {
       txt = 'Nobotty' + (version ? ' ' + version : '') + ': ' + stats.checked + '/' + stats.withAuthor + ' checked, ' + (stats.low + stats.mid) + ' flagged'
-          + (waiting ? ', ' + waiting + ' waiting' : '') + (paused ? ', paused ' + fmtWait(paused) + ' (Reddit limit)' : '')
+          + (waiting ? ', ' + waiting + ' waiting' : '') + (paused ? ', paused ' + fmtWait(paused) + ' (Reddit limit)' : (waiting && limit.remaining !== null && limit.remaining <= 20 ? ', slowed by Reddit limit (' + limit.remaining + ' left, resets in ' + fmtWait(limit.reset || 60) + ')' : ''))
           + (bad ? ' [background: ' + bgState + ']' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
       chip.style.opacity = '.85';
       if (paused && !tickTimer) tickTimer = setInterval(function () { if (backoffUntil <= Date.now()) { clearInterval(tickTimer); tickTimer = null; } drawChip(); }, 1000);
@@ -298,7 +352,9 @@
     evaluateDMs();
     if (!cfg.enabled) { document.querySelectorAll('[data-nobotty]').forEach(clear); afterEval(); return; }
     if (cfg.useStripe) document.documentElement.setAttribute('data-nobotty-style', 'stripe'); else document.documentElement.removeAttribute('data-nobotty-style');
-    var dups = duplicateMap();
+    var dups = duplicateMap(), unknown = 0;
+    document.querySelectorAll(SEL).forEach(function (el) { var n = authorOf(el); if (n && !cache[n]) unknown++; });
+    if (unknown) bulkPrefetch(unknown);
     stats.seen = 0; stats.withAuthor = 0; stats.checked = 0; stats.failed = 0; stats.low = 0; stats.mid = 0; stats.good = 0; stats.hist = 0;
     document.querySelectorAll(SEL).forEach(function (el) {
       stats.seen++;
@@ -318,50 +374,41 @@
       if (lv === 'neutral' || (lv === 'medium' && !cfg.showMedium) || (lv === 'good' && !cfg.showGood)) { clear(el); return; }
       if (lv === 'low') stats.low++; else if (lv === 'medium') stats.mid++; else stats.good++;
       el.setAttribute('data-nobotty', lv);
-      setOwnHeight(el); placeMarker(el); setRing(el);
+      setOwnHeight(el); setDot(el, lv);
       if (cfg.hoverReasons) el.setAttribute('title', 'Signals only, not proof: ' + (why.join(', ') || 'no warning signs')); else el.removeAttribute('title');
       if (lv === 'low' && cfg.collapseHigh) { el.setAttribute('data-nobotty-collapse', '1'); el.setAttribute('data-nobotty-label', 'Low trust · u/' + name); }
       else { el.removeAttribute('data-nobotty-collapse'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); }
     });
     afterEval();
   }
-  /* The marker is a small dot at the avatar (or next to the username if there is no avatar). */
-  /* Find the round profile picture itself (not a wrapper that also holds the thread line). */
-  var AV_TAGS = { IMG: 1, 'FACEPLATE-IMG': 1, 'SHREDDIT-AVATAR': 1, 'FACEPLATE-AVATAR': 1, SVG: 1 };
-  function findAvatar(el) {
-    var cand = el.querySelectorAll(':scope > [slot="commentAvatar"], :scope > [slot="commentAvatar"] *, :scope > [slot="avatar"], :scope > [slot="avatar"] *, :scope > [slot="commentMeta"], :scope > [slot="commentMeta"] *, :scope > .entry img, :scope > img');
-    var best = null;
-    for (var i = 0; i < cand.length; i++) {
-      var c = cand[i], r = c.getBoundingClientRect();
-      if (r.width < 18 || r.width > 64 || Math.abs(r.width - r.height) > 3) continue;
-      var radius = parseFloat(getComputedStyle(c).borderTopLeftRadius) || 0;
-      if (AV_TAGS[c.tagName] || radius >= r.width * 0.4) { best = r; break; }
+  /* ---------- the dot: a real element placed right after the comment's time ("4d ago (dot)") ----------
+     It flows with the header text, so nothing is measured or positioned. No time found = no dot. */
+  function ownedBy(el, n) { return n.closest(SEL) === el; }
+  function timeAnchor(el) {
+    var times = el.querySelectorAll('faceplate-timeago, time'), last = null;
+    for (var i = 0; i < times.length; i++) {
+      var t = times[i];
+      if (!ownedBy(el, t) || t.closest('[slot="comment"], .usertext-body, .md')) continue;
+      if (t.tagName === 'TIME' && t.parentElement && t.parentElement.closest('faceplate-timeago')) continue;
+      last = t;
     }
-    return best;
+    if (!last) return null;
+    var link = last.parentElement && last.parentElement.closest('a');
+    return link && ownedBy(el, link) ? link : last;
   }
-  function findNameLink(el) {
-    var l = el.querySelector(':scope > [slot="commentMeta"] a[href*="/user/"]') || el.querySelector(':scope > .entry a.author') || el.querySelector(':scope > .entry a[href*="/user/"]');
-    return l ? l.getBoundingClientRect() : null;
+  function ownDot(el) {
+    var d = el.querySelectorAll('.nobotty-dot');
+    for (var i = 0; i < d.length; i++) if (ownedBy(el, d[i])) return d[i];
+    return null;
   }
-  /* The dot sits NEXT to the avatar (left of it), vertically centred, so nothing can cover it. */
-  function placeMarker(el) {
-    var host = el.getBoundingClientRect(), dx = -16, dy = 8, av = findAvatar(el);
-    if (av) { dx = av.left - host.left - 16; dy = av.top - host.top + (av.height - 10) / 2; }
-    else { var nm = findNameLink(el); if (nm) { dx = nm.left - host.left - 16; dy = nm.top - host.top + (nm.height - 10) / 2; } }
-    el.style.setProperty('--nb-dx', Math.round(dx) + 'px'); el.style.setProperty('--nb-dy', Math.round(dy) + 'px');
+  function setDot(el, lv) {
+    var dot = ownDot(el), anchor = timeAnchor(el);
+    if (!anchor || cfg.useStripe) { if (dot) dot.remove(); return; }
+    if (!dot) { dot = document.createElement('span'); dot.className = 'nobotty-dot'; dot.setAttribute('aria-hidden', 'true'); }
+    if (dot.getAttribute('data-lv') !== lv) dot.setAttribute('data-lv', lv);
+    if (anchor.nextSibling !== dot) anchor.after(dot);
   }
-  var ringDone = 0;
-  function setRing(el) {
-    if (Date.now() - ringDone < 5000) return; ringDone = Date.now();
-    var n = el, c = '';
-    while (n && n.nodeType === 1) {
-      var bg = getComputedStyle(n).backgroundColor;
-      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') { c = bg; break; }
-      n = n.parentElement || (n.getRootNode && n.getRootNode().host);
-    }
-    if (!c) { var b = getComputedStyle(document.body).backgroundColor; c = (b && b !== 'rgba(0, 0, 0, 0)') ? b : '#0e1113'; }
-    document.documentElement.style.setProperty('--nb-ring', c);
-  }
+  function removeDot(el) { var d = ownDot(el); if (d) d.remove(); }
   /* In stripe mode the stripe should only cover the comment itself, not its whole reply tree. */
   function setOwnHeight(el) {
     var own = el.querySelector(':scope > [slot="actionRow"]') || el.querySelector(':scope > [slot="comment"]') || el.querySelector(':scope > .entry');
@@ -371,7 +418,12 @@
   }
   function afterEval() { drawChip(); try { console.log('[Nobotty]', JSON.stringify(stats)); } catch (e) {} }
   function clear(el) {
-    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); }); ['--nb-h', '--nb-dx', '--nb-dy'].forEach(function (v) { el.style.removeProperty(v); });
+    removeDot(el);
+    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); }); ['--nb-h'].forEach(function (v) { el.style.removeProperty(v); });
+  }
+  function onlyDots(m) {
+    var n = [].concat([].slice.call(m.addedNodes), [].slice.call(m.removedNodes));
+    return n.length > 0 && n.every(function (x) { return x.nodeType === 1 && x.classList.contains('nobotty-dot'); });
   }
   function schedule(ms) { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, typeof ms === 'number' ? ms : 400); }
 
@@ -387,7 +439,7 @@
     cfg = Object.assign({}, DEFAULTS, (r && r.cfg) || {});
     loadCache(function () {
       evaluate();
-      new MutationObserver(function (m) { for (var i = 0; i < m.length; i++) { if (m[i].target !== chip && !(chip && chip.contains(m[i].target))) { schedule(); return; } } }).observe(document.body, { childList: true, subtree: true });
+      new MutationObserver(function (m) { for (var i = 0; i < m.length; i++) { if (m[i].target !== chip && !(chip && chip.contains(m[i].target)) && !onlyDots(m[i])) { schedule(); return; } } }).observe(document.body, { childList: true, subtree: true });
     });
   });
   window.addEventListener('resize', function () { schedule(200); });

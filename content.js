@@ -362,91 +362,41 @@
       if (lv === 'neutral' || (lv === 'medium' && !cfg.showMedium) || (lv === 'good' && !cfg.showGood)) { clear(el); return; }
       if (lv === 'low') stats.low++; else if (lv === 'medium') stats.mid++; else stats.good++;
       el.setAttribute('data-nobotty', lv);
-      setOwnHeight(el); placeMarker(el); setRing(el);
+      setOwnHeight(el); setDot(el, lv);
       if (cfg.hoverReasons) el.setAttribute('title', 'Signals only, not proof: ' + (why.join(', ') || 'no warning signs')); else el.removeAttribute('title');
       if (lv === 'low' && cfg.collapseHigh) { el.setAttribute('data-nobotty-collapse', '1'); el.setAttribute('data-nobotty-label', 'Low trust · u/' + name); }
       else { el.removeAttribute('data-nobotty-collapse'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); }
     });
-    afterEval(); replaceAll();
+    afterEval();
   }
-  /* The marker is a small dot at the avatar (or next to the username if there is no avatar). */
-  /* Find the round profile picture itself (not a wrapper that also holds the thread line). */
-  var AV_TAGS = { IMG: 1, 'FACEPLATE-IMG': 1, 'SHREDDIT-AVATAR': 1, 'FACEPLATE-AVATAR': 1, SVG: 1 };
-  function findAvatar(el) {
-    var cand = el.querySelectorAll(':scope > [slot="commentAvatar"], :scope > [slot="commentAvatar"] *, :scope > [slot="avatar"], :scope > [slot="avatar"] *, :scope > [slot="commentMeta"], :scope > [slot="commentMeta"] *, :scope > .entry img, :scope > img');
-    var best = null;
-    for (var i = 0; i < cand.length; i++) {
-      var c = cand[i], r = c.getBoundingClientRect();
-      if (r.width < 18 || r.width > 64 || Math.abs(r.width - r.height) > 3) continue;
-      var radius = parseFloat(getComputedStyle(c).borderTopLeftRadius) || 0;
-      if (AV_TAGS[c.tagName] || radius >= r.width * 0.4) { best = r; break; }
+  /* ---------- the dot: a real element placed right after the comment's time ("4d ago (dot)") ----------
+     It flows with the header text, so nothing is measured or positioned. No time found = no dot. */
+  function ownedBy(el, n) { return n.closest(SEL) === el; }
+  function timeAnchor(el) {
+    var times = el.querySelectorAll('faceplate-timeago, time'), last = null;
+    for (var i = 0; i < times.length; i++) {
+      var t = times[i];
+      if (!ownedBy(el, t) || t.closest('[slot="comment"], .usertext-body, .md')) continue;
+      if (t.tagName === 'TIME' && t.parentElement && t.parentElement.closest('faceplate-timeago')) continue;
+      last = t;
     }
-    return best;
+    if (!last) return null;
+    var link = last.parentElement && last.parentElement.closest('a');
+    return link && ownedBy(el, link) ? link : last;
   }
-  function findNameLink(el) {
-    var l = el.querySelector(':scope > [slot="commentMeta"] a[href*="/user/"]') || el.querySelector(':scope > .entry a.author') || el.querySelector(':scope > .entry a[href*="/user/"]');
-    return l ? l.getBoundingClientRect() : null;
+  function ownDot(el) {
+    var d = el.querySelectorAll('.nobotty-dot');
+    for (var i = 0; i < d.length; i++) if (ownedBy(el, d[i])) return d[i];
+    return null;
   }
-  /* The dot sits at the end of the header line ("name . 12h ago  (dot)"), away from the avatar:
-     Reddit draws its own green "online" indicator there. Falls back to the left of the avatar. */
-  function headerEnd(el) {
-    var own = function (n) { return n.closest(el.localName) === el; };
-    var nm = null, links = el.querySelectorAll('a[href*="/user/"], a[href*="/u/"], a.author');
-    for (var i = 0; i < links.length; i++) {
-      var r0 = links[i].getBoundingClientRect();
-      if (own(links[i]) && r0.width > 8 && r0.height > 4 && r0.height < 40) { nm = r0; break; }
-    }
-    if (!nm) {
-      var au = (el.getAttribute('author') || '').toLowerCase();
-      if (au) {
-        var tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), t;
-        while ((t = tw.nextNode())) {
-          if (!t.parentElement || !own(t.parentElement)) continue;
-          if (t.nodeValue.trim().toLowerCase().replace(/^u\//, '') !== au) continue;
-          var rg = document.createRange(); rg.selectNodeContents(t);
-          var rr = rg.getBoundingClientRect();
-          if (rr.width > 8 && rr.height > 4 && rr.height < 40) { nm = rr; break; }
-        }
-      }
-    }
-    if (!nm) return null;
-    var row = nm.top + nm.height / 2, maxR = nm.right;
-    var all = el.querySelectorAll('*');
-    for (var j = 0; j < all.length; j++) {
-      var n = all[j]; if (n.children.length || !own(n)) continue;
-      var r = n.getBoundingClientRect();
-      if (r.width < 1 || r.height < 1 || r.height > 40 || r.width > 320) continue;
-      if (Math.abs(r.top + r.height / 2 - row) > 9 || r.left < nm.left - 2) continue;
-      if (r.right > maxR) maxR = r.right;
-    }
-    return { x: maxR, y: row };
+  function setDot(el, lv) {
+    var dot = ownDot(el), anchor = timeAnchor(el);
+    if (!anchor || cfg.useStripe) { if (dot) dot.remove(); return; }
+    if (!dot) { dot = document.createElement('span'); dot.className = 'nobotty-dot'; dot.setAttribute('aria-hidden', 'true'); }
+    if (dot.getAttribute('data-lv') !== lv) dot.setAttribute('data-lv', lv);
+    if (anchor.nextSibling !== dot) anchor.after(dot);
   }
-  function placeMarker(el) {
-    var host = el.getBoundingClientRect(), dx = -16, dy = 8;
-    var he = headerEnd(el);
-    if (he && he.x - host.left + 22 < host.width) { dx = he.x - host.left + 8; dy = he.y - host.top - 5; }
-    else {
-      var av = findAvatar(el), au2 = (el.getAttribute('author') || '');
-      if (av && au2) { dx = av.right - host.left + 8 + au2.length * 8.4 + 78; dy = av.top - host.top + (av.height - 10) / 2 - 4; }
-      else if (av) { dx = av.left - host.left - 16; dy = av.top - host.top + (av.height - 10) / 2; }
-    }
-    el.style.setProperty('--nb-dx', Math.round(dx) + 'px'); el.style.setProperty('--nb-dy', Math.round(dy) + 'px');
-  }
-  /* Layout settles after images and fonts load, so measure again a moment later. */
-  var replaceTimer = null;
-  function replaceAll() { clearTimeout(replaceTimer); replaceTimer = setTimeout(function () { document.querySelectorAll('[data-nobotty]').forEach(placeMarker); }, 700); }
-  var ringDone = 0;
-  function setRing(el) {
-    if (Date.now() - ringDone < 5000) return; ringDone = Date.now();
-    var n = el, c = '';
-    while (n && n.nodeType === 1) {
-      var bg = getComputedStyle(n).backgroundColor;
-      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') { c = bg; break; }
-      n = n.parentElement || (n.getRootNode && n.getRootNode().host);
-    }
-    if (!c) { var b = getComputedStyle(document.body).backgroundColor; c = (b && b !== 'rgba(0, 0, 0, 0)') ? b : '#0e1113'; }
-    document.documentElement.style.setProperty('--nb-ring', c);
-  }
+  function removeDot(el) { var d = ownDot(el); if (d) d.remove(); }
   /* In stripe mode the stripe should only cover the comment itself, not its whole reply tree. */
   function setOwnHeight(el) {
     var own = el.querySelector(':scope > [slot="actionRow"]') || el.querySelector(':scope > [slot="comment"]') || el.querySelector(':scope > .entry');
@@ -456,7 +406,12 @@
   }
   function afterEval() { drawChip(); try { console.log('[Nobotty]', JSON.stringify(stats)); } catch (e) {} }
   function clear(el) {
-    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); }); ['--nb-h', '--nb-dx', '--nb-dy'].forEach(function (v) { el.style.removeProperty(v); });
+    removeDot(el);
+    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); }); ['--nb-h'].forEach(function (v) { el.style.removeProperty(v); });
+  }
+  function onlyDots(m) {
+    var n = [].concat([].slice.call(m.addedNodes), [].slice.call(m.removedNodes));
+    return n.length > 0 && n.every(function (x) { return x.nodeType === 1 && x.classList.contains('nobotty-dot'); });
   }
   function schedule(ms) { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, typeof ms === 'number' ? ms : 400); }
 
@@ -472,11 +427,10 @@
     cfg = Object.assign({}, DEFAULTS, (r && r.cfg) || {});
     loadCache(function () {
       evaluate();
-      new MutationObserver(function (m) { for (var i = 0; i < m.length; i++) { if (m[i].target !== chip && !(chip && chip.contains(m[i].target))) { schedule(); return; } } }).observe(document.body, { childList: true, subtree: true });
+      new MutationObserver(function (m) { for (var i = 0; i < m.length; i++) { if (m[i].target !== chip && !(chip && chip.contains(m[i].target)) && !onlyDots(m[i])) { schedule(); return; } } }).observe(document.body, { childList: true, subtree: true });
     });
   });
   window.addEventListener('resize', function () { schedule(200); });
-  document.addEventListener('load', function (e) { if (e.target && e.target.tagName === 'IMG') replaceAll(); }, true);
   window.addEventListener('nobotty-config', function (e) { cfg = Object.assign({}, DEFAULTS, e.detail || {}); evaluate(); });
   if (hasChrome && chrome.storage.onChanged) chrome.storage.onChanged.addListener(function (ch) {
     if (ch.cfg) { cfg = Object.assign({}, DEFAULTS, ch.cfg.newValue || {}); evaluate(); }
