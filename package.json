@@ -1,9 +1,9 @@
 {
   "name": "nobotty",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Browser extension: bot, scam and sales-pitch signals for Reddit comments and DMs.",
   "license": "MIT",
-  "scripts": { "test": "node tests/test.js && node tests/test2.js && node tests/test3.js && node tests/test4.js && node tests/test5.js && node tests/test6.js && node tests/test7.js && node tests/test8.js", "build": "node scripts/build-userscript.js" },
+  "scripts": { "test": "node tests/test.js && node tests/test2.js && node tests/test3.js && node tests/test4.js && node tests/test5.js && node tests/test6.js && node tests/test7.js && node tests/test8.js && node tests/test9.js", "build": "node scripts/build-userscript.js" },
   "devDependencies": { "playwright": "^1.49.0" }
 }

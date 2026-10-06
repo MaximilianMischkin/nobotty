@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nobotty
 // @namespace    https://github.com/MaximilianMischkin/nobotty
-// @version      0.3.0
+// @version      0.3.1
 // @description  Spot likely bots, scams and sales pitches on Reddit. Runs locally.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -9,7 +9,7 @@
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
-(function(){var st=document.createElement('style');st.textContent="/* Nobotty: a small colour dot at each checked account's avatar (works with Reddit's shadow DOM).\n   red = low trust, orange = medium, green = good. Optional: a thin stripe instead (setting \"Use a stripe\"). */\n[data-nobotty]{position:relative;--nb-c:transparent}\n[data-nobotty=\"low\"]{--nb-c:#f0646b}\n[data-nobotty=\"medium\"]{--nb-c:#f3b04e}\n[data-nobotty=\"good\"]{--nb-c:#4fc08d}\n/* dot (default) */\n[data-nobotty]::after{content:\"\";position:absolute;left:var(--nb-dx,-12px);top:var(--nb-dy,6px);width:9px;height:9px;border-radius:50%;\n  background:var(--nb-c);box-shadow:0 0 0 2px var(--nb-ring,#0e1113);pointer-events:none;z-index:2}\n/* stripe (option) */\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty]::after{left:-10px;top:3px;width:3px;height:calc(var(--nb-h, 100%) - 6px);border-radius:3px;box-shadow:none;opacity:.9}\n@keyframes nobotty-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}\n@media (prefers-reduced-motion:no-preference){[data-nobotty]::after{animation:nobotty-pop 220ms cubic-bezier(.23,1,.32,1)}}\n/* optional one-line collapse (low trust comments, or hidden direct messages) */\n[data-nobotty-collapse]:not([data-nobotty-open]),[data-nobotty-dm]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}\n[data-nobotty-collapse]::before,[data-nobotty-dm]::before{\n  content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;\n  color:#f0646b;padding:0 8px 0 20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}\n[data-nobotty-collapse]::after,[data-nobotty-dm]::after,\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty-collapse]::after,html[data-nobotty-style=\"stripe\"] [data-nobotty-dm]::after{left:6px;top:6px;width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 2px var(--nb-ring,#0e1113);height:9px}\n[data-nobotty-dm]{--nb-c:#f0646b}\n[data-nobotty-dm]::after{content:\"\";position:absolute;background:var(--nb-c);pointer-events:none;z-index:2}\n";document.head.appendChild(st);})();
+(function(){var st=document.createElement('style');st.textContent="/* Nobotty: a small colour dot at each checked account's avatar (works with Reddit's shadow DOM).\n   red = low trust, orange = medium, green = good. Optional: a thin stripe instead (setting \"Use a stripe\"). */\n[data-nobotty]{position:relative;--nb-c:transparent}\n[data-nobotty=\"low\"]{--nb-c:#f0646b}\n[data-nobotty=\"medium\"]{--nb-c:#f3b04e}\n[data-nobotty=\"good\"]{--nb-c:#4fc08d}\n/* dot (default) */\n[data-nobotty]::after{content:\"\";position:absolute;left:var(--nb-dx,-16px);top:var(--nb-dy,8px);width:10px;height:10px;box-sizing:border-box;border-radius:50%;\n  background:var(--nb-c);pointer-events:none;z-index:1}\n/* stripe (option) */\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty]::after{left:-10px;top:3px;width:3px;height:calc(var(--nb-h, 100%) - 6px);border-radius:3px;box-shadow:none;opacity:.9}\n@keyframes nobotty-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}\n@media (prefers-reduced-motion:no-preference){[data-nobotty]::after{animation:nobotty-pop 220ms cubic-bezier(.23,1,.32,1)}}\n/* optional one-line collapse (low trust comments, or hidden direct messages) */\n[data-nobotty-collapse]:not([data-nobotty-open]),[data-nobotty-dm]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}\n[data-nobotty-collapse]::before,[data-nobotty-dm]::before{\n  content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;\n  color:#f0646b;padding:0 8px 0 20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}\n[data-nobotty-collapse]::after,[data-nobotty-dm]::after,\nhtml[data-nobotty-style=\"stripe\"] [data-nobotty-collapse]::after,html[data-nobotty-style=\"stripe\"] [data-nobotty-dm]::after{left:6px;top:5px;width:10px;height:10px;border-radius:50%;box-shadow:none}\n[data-nobotty-dm]{--nb-c:#f0646b}\n[data-nobotty-dm]::after{content:\"\";position:absolute;background:var(--nb-c);pointer-events:none;z-index:2}\n";document.head.appendChild(st);})();
 /* Nobotty content script. Local only: reads the page and public account info, shows a colour stripe per comment. */
 (function () {
   'use strict';
@@ -326,19 +326,28 @@
     afterEval();
   }
   /* The marker is a small dot at the avatar (or next to the username if there is no avatar). */
+  /* Find the round profile picture itself (not a wrapper that also holds the thread line). */
+  var AV_TAGS = { IMG: 1, 'FACEPLATE-IMG': 1, 'SHREDDIT-AVATAR': 1, 'FACEPLATE-AVATAR': 1, SVG: 1 };
   function findAvatar(el) {
-    var list = el.querySelectorAll(':scope > [slot="commentAvatar"], :scope > [slot="avatar"], :scope > [slot="commentMeta"] img, :scope > [slot="commentMeta"] faceplate-img, :scope > [slot="commentMeta"] shreddit-avatar, :scope > .entry img, :scope > img');
-    for (var i = 0; i < list.length; i++) { var r = list[i].getBoundingClientRect(); if (r.width >= 12 && r.width <= 72 && r.height >= 12) return r; }
-    return null;
+    var cand = el.querySelectorAll(':scope > [slot="commentAvatar"], :scope > [slot="commentAvatar"] *, :scope > [slot="avatar"], :scope > [slot="avatar"] *, :scope > [slot="commentMeta"], :scope > [slot="commentMeta"] *, :scope > .entry img, :scope > img');
+    var best = null;
+    for (var i = 0; i < cand.length; i++) {
+      var c = cand[i], r = c.getBoundingClientRect();
+      if (r.width < 18 || r.width > 64 || Math.abs(r.width - r.height) > 3) continue;
+      var radius = parseFloat(getComputedStyle(c).borderTopLeftRadius) || 0;
+      if (AV_TAGS[c.tagName] || radius >= r.width * 0.4) { best = r; break; }
+    }
+    return best;
   }
   function findNameLink(el) {
     var l = el.querySelector(':scope > [slot="commentMeta"] a[href*="/user/"]') || el.querySelector(':scope > .entry a.author') || el.querySelector(':scope > .entry a[href*="/user/"]');
     return l ? l.getBoundingClientRect() : null;
   }
+  /* The dot sits NEXT to the avatar (left of it), vertically centred, so nothing can cover it. */
   function placeMarker(el) {
-    var host = el.getBoundingClientRect(), dx = -12, dy = 6, av = findAvatar(el);
-    if (av) { dx = av.right - host.left - 9; dy = av.bottom - host.top - 9; }
-    else { var nm = findNameLink(el); if (nm) { dx = nm.left - host.left - 14; dy = nm.top - host.top + (nm.height - 9) / 2; } }
+    var host = el.getBoundingClientRect(), dx = -16, dy = 8, av = findAvatar(el);
+    if (av) { dx = av.left - host.left - 16; dy = av.top - host.top + (av.height - 10) / 2; }
+    else { var nm = findNameLink(el); if (nm) { dx = nm.left - host.left - 16; dy = nm.top - host.top + (nm.height - 10) / 2; } }
     el.style.setProperty('--nb-dx', Math.round(dx) + 'px'); el.style.setProperty('--nb-dy', Math.round(dy) + 'px');
   }
   var ringDone = 0;
@@ -381,6 +390,7 @@
       new MutationObserver(function (m) { for (var i = 0; i < m.length; i++) { if (m[i].target !== chip && !(chip && chip.contains(m[i].target))) { schedule(); return; } } }).observe(document.body, { childList: true, subtree: true });
     });
   });
+  window.addEventListener('resize', function () { schedule(200); });
   window.addEventListener('nobotty-config', function (e) { cfg = Object.assign({}, DEFAULTS, e.detail || {}); evaluate(); });
   if (hasChrome && chrome.storage.onChanged) chrome.storage.onChanged.addListener(function (ch) {
     if (ch.cfg) { cfg = Object.assign({}, DEFAULTS, ch.cfg.newValue || {}); evaluate(); }
