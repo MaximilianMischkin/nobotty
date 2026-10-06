@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Nobotty
 // @namespace    https://github.com/MaximilianMischkin/nobotty
-// @version      0.4.2
+// @version      0.4.3
 // @description  Spot likely bots, scams and sales pitches on Reddit. Runs locally.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -197,7 +197,7 @@
     if (thread.id !== id) thread.ok = false;
     thread.busy = true; thread.id = id; thread.at = now;
     getJSON('/comments/' + id + '.json?limit=500&depth=12&raw_json=1').then(function (r) {
-      noteLimit(r && r.rl);
+      noteNet('thread', r); noteLimit(r && r.rl);
       if (r && r.status === 429) backoffUntil = Date.now() + 60000;
       if (!r || !r.ok) throw new Error('thread ' + ((r && (r.status || r.error)) || 'failed'));
       thread.ok = true;
@@ -207,14 +207,14 @@
       for (var i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
       return chunks.reduce(function (p, ch) {
         return p.then(function () { return getJSON('/api/user_data_by_account_ids.json?ids=' + ch.join(',')); }).then(function (u) {
-          noteLimit(u && u.rl); if (!u || !u.ok || !u.data) return;
+          noteNet('accounts', u); noteLimit(u && u.rl); if (!u || !u.ok || !u.data) return;
           Object.keys(u.data).forEach(function (k) {
             var a = u.data[k]; if (!a || !a.name) return;
             cache[a.name] = { t: Date.now(), created: a.created_utc, karma: (a.link_karma || 0) + (a.comment_karma || 0) };
           });
         });
       }, Promise.resolve());
-    }).catch(function (e) { try { console.warn('[Nobotty] bulk lookup failed:', e); } catch (x) {} })
+    }).catch(function (e) { if (!lastNet || lastNet.indexOf('thread') !== 0) lastNet = 'bulk ' + String((e && e.message) || e).slice(0, 50); try { console.warn('[Nobotty] bulk lookup failed:', e); } catch (x) {} })
       .then(function () {
         thread.busy = false;
         for (var i = queue.length - 1; i >= 0; i--) { var j = queue[i]; if (j.k === 'a' && cache[j.n] && !cache[j.n].err) { delete queued[j.k + ':' + j.n]; queue.splice(i, 1); } }
@@ -229,6 +229,11 @@
   function spacing() {
     if (limit.remaining !== null && limit.remaining <= 20) return Math.max(300, ((limit.reset || 60) * 1000) / Math.max(limit.remaining, 1));
     return BASE_SPACING;
+  }
+  var lastNet = '';
+  function noteNet(what, r) {
+    lastNet = what + ' ' + (r ? (r.status || r.error || '?') : 'no answer') + (r && r.rl && r.rl.remaining != null ? ', ' + r.rl.remaining + ' left, reset ' + Math.round(r.rl.reset || 0) + 's' : '');
+    try { console.log('[Nobotty] net:', lastNet); } catch (e) {}
   }
   function noteLimit(rl) {
     if (!rl || rl.remaining == null) return;
@@ -257,7 +262,7 @@
     var job = nextJob(bulkPending), key = job.k + ':' + job.n; delete queued[key]; inflight++; lastStart = Date.now();
     lookup(job.k, job.n)
       .then(function (r) {
-        noteLimit(r.rl);
+        noteNet(job.k === 'h' ? 'history' : 'account', r); noteLimit(r.rl);
         if (r.status === 429) { backoffUntil = Date.now() + 60000; queue.unshift(job); queued[key] = 1; throw new Error('rate'); }
         if (!r.ok) { if (job.k === 'a') cache[job.n] = { t: Date.now(), err: r.status || r.error || 'failed' }; else if (cache[job.n]) cache[job.n].hist = { n: 0, err: r.status || 1 }; return; }
         if (job.k === 'a') {
@@ -345,7 +350,8 @@
     if (waiting || bad || stats.failed || paused) {
       txt = 'Nobotty' + (version ? ' ' + version : '') + ': ' + stats.checked + '/' + stats.withAuthor + ' checked, ' + (stats.low + stats.mid) + ' flagged'
           + (waiting ? ', ' + waiting + ' waiting' : '') + (paused ? ', paused ' + fmtWait(paused) + ' (Reddit limit)' : (waiting && limit.remaining !== null && limit.remaining <= 20 ? ', slowed by Reddit limit (' + limit.remaining + ' left, resets in ' + fmtWait(limit.reset || 60) + ')' : ''))
-          + (bad ? ' [background: ' + bgState + ']' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
+          + (bad ? ' [background: ' + bgState + ']' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '')
+          + (lastNet ? ' [last: ' + lastNet + ']' : '');
       chip.style.opacity = '.85';
       if (paused && !tickTimer) tickTimer = setInterval(function () { if (backoffUntil <= Date.now()) { clearInterval(tickTimer); tickTimer = null; } drawChip(); }, 1000);
     } else {
