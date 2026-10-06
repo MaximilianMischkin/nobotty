@@ -164,7 +164,7 @@
 
   /* Bulk lookup: one request for the thread's comment tree (gives every author's account id),
      then one request per 100 accounts. Replaces ~1 request per account, which ran into Reddit's limit. */
-  var thread = { id: null, at: 0, busy: false, ids: {} };
+  var thread = { id: null, at: 0, busy: false, ok: false };
   function getJSON(path) {
     if (rt && !window.__NOBOTTY_FETCH) return withTimeout(Promise.resolve(rt.sendMessage({ type: 'nobotty-get', path: path })), 15000, 'background not responding');
     return pageFetch(path);
@@ -177,14 +177,18 @@
     if (d.author && d.author_fullname && d.author !== '[deleted]') out[d.author] = d.author_fullname;
     if (d.replies) collectAuthors(d.replies, out);
   }
+  function threadId() { var m = location.pathname.match(/\/comments\/([a-z0-9]{3,12})/i); return m ? m[1].toLowerCase() : null; }
   function bulkPrefetch(unknown) {
-    var m = location.pathname.match(/\/comments\/([a-z0-9]{3,12})/i); if (!m || thread.busy) return;
-    var id = m[1].toLowerCase(), now = Date.now();
+    var id = threadId(); if (!id || thread.busy || backoffUntil > Date.now()) return;
+    var now = Date.now();
     if (thread.id === id && (unknown < 3 || now - thread.at < 30000)) return;
+    if (thread.id !== id) thread.ok = false;
     thread.busy = true; thread.id = id; thread.at = now;
     getJSON('/comments/' + id + '.json?limit=500&depth=12&raw_json=1').then(function (r) {
       noteLimit(r && r.rl);
+      if (r && r.status === 429) backoffUntil = Date.now() + 60000;
       if (!r || !r.ok) throw new Error('thread ' + ((r && (r.status || r.error)) || 'failed'));
+      thread.ok = true;
       var map = {}; collectAuthors(r.data, map);
       var need = Object.keys(map).filter(function (n) { var c = cache[n]; return !c || c.err || Date.now() - c.t > TTL; });
       var ids = need.map(function (n) { return map[n]; }), chunks = [];
@@ -205,9 +209,9 @@
         saveCache(); drawChip(); schedule(50);
       });
   }
-  function nextJob() {
+  function nextJob(historyOnly) {
     var bi = 0, bp = Infinity;
-    for (var i = 0; i < queue.length; i++) { var p = prio[queue[i].k + ':' + queue[i].n]; if (p === undefined) p = 1e9; if (p < bp) { bp = p; bi = i; } }
+    for (var i = 0; i < queue.length; i++) { if (historyOnly && queue[i].k === 'a') continue; var p = prio[queue[i].k + ':' + queue[i].n]; if (p === undefined) p = 1e9; if (p < bp) { bp = p; bi = i; } }
     return queue.splice(bi, 1)[0];
   }
   function spacing() {
@@ -230,10 +234,15 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { pump(); schedule(100); } });
   function pump() {
     if (inflight >= MAXC || !queue.length) return;
-    if (thread.busy) { if (!pumpTimer) pumpTimer = setTimeout(function () { pumpTimer = null; pump(); }, 500); return; }
+    if (thread.busy || (threadId() && !(thread.ok && thread.id === threadId()))) {
+      if (!thread.busy) bulkPrefetch(99);
+      var onlyA = queue.every(function (j) { return j.k === 'a'; });
+      if (onlyA || thread.busy) { if (!pumpTimer) pumpTimer = setTimeout(function () { pumpTimer = null; pump(); }, 1000); return; }
+    }
     var now = Date.now(), wait = Math.max(0, backoffUntil - now, lastStart + spacing() - now);
     if (wait > 0) { if (!pumpTimer) pumpTimer = setTimeout(function () { pumpTimer = null; pump(); }, Math.min(wait, 1000)); return; }
-    var job = nextJob(), key = job.k + ':' + job.n; delete queued[key]; inflight++; lastStart = Date.now();
+    var bulkPending = !!threadId() && !(thread.ok && thread.id === threadId());
+    var job = nextJob(bulkPending), key = job.k + ':' + job.n; delete queued[key]; inflight++; lastStart = Date.now();
     lookup(job.k, job.n)
       .then(function (r) {
         noteLimit(r.rl);
