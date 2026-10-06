@@ -1,3 +1,15 @@
+// ==UserScript==
+// @name         Botless
+// @namespace    https://github.com/MaximilianMischkin/botless
+// @version      0.1.0
+// @description  Spot likely bots, scams and sales pitches on Reddit. Runs locally.
+// @match        https://www.reddit.com/*
+// @match        https://old.reddit.com/*
+// @match        https://chat.reddit.com/*
+// @run-at       document-idle
+// @noframes
+// ==/UserScript==
+(function(){var st=document.createElement('style');st.textContent="/* Botless: styles live on the comment host element so they work with Reddit's shadow DOM. */\n[data-botless]{position:relative}\n[data-botless=\"medium\"],[data-botless=\"high\"]{box-shadow:inset 3px 0 0 #e8693f}\n[data-botless=\"high\"]::before,[data-botless=\"medium\"]::before{\n  content:attr(data-botless-label);display:block;font:600 12px/1.4 system-ui,-apple-system,sans-serif;\n  color:#e8693f;padding:4px 8px;margin:2px 0 4px 8px;border-radius:999px;background:rgba(232,105,63,.12);width:max-content;max-width:calc(100% - 16px);\n  white-space:normal;cursor:pointer}\n[data-botless=\"high\"]:not([data-botless-open]){display:block;max-height:30px;overflow:hidden;opacity:.7}\n[data-botless=\"medium\"]:not([data-botless-open]){opacity:.85}\n@media (prefers-reduced-motion:no-preference){[data-botless]{transition:opacity 160ms cubic-bezier(.23,1,.32,1)}}\n";document.head.appendChild(st);})();
 /* Botless content script. Local only: reads the page and public account info, shows hints. */
 (function () {
   'use strict';
@@ -192,4 +204,27 @@
     if (ch.cfg) { cfg = Object.assign({}, DEFAULTS, ch.cfg.newValue || {}); evaluate(); }
   });
   window.__botless = { dmKind: dmKind, evaluate: evaluate, level: level, accountSignals: accountSignals, textSignals: textSignals };
+})();
+
+
+/* ---- in-page settings (userscript build has no toolbar popup) ---- */
+(function () {
+  var D = { enabled: true, collapseHigh: true, showMedium: true, trusted: [], dmFilter: true, dmBlockBots: true, dmBlockSellers: true };
+  function load() { try { return Object.assign({}, D, JSON.parse(localStorage.getItem('botless:cfg')) || {}); } catch (e) { return Object.assign({}, D); } }
+  var btn = document.createElement('button'); btn.textContent = 'Botless'; btn.setAttribute('aria-label', 'Botless settings');
+  btn.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483000;padding:8px 14px;border:0;border-radius:999px;background:#10231a;color:#f4f6ef;font:600 13px system-ui,sans-serif;cursor:pointer;opacity:.75';
+  var box = document.createElement('div'); box.hidden = true;
+  box.style.cssText = 'position:fixed;left:12px;bottom:52px;z-index:2147483000;width:290px;padding:14px;border-radius:16px;background:#f4f6ef;color:#10231a;font:14px/1.4 system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.35)';
+  var rows = [['enabled','Turn on','Check comments and messages'],['collapseHigh','Collapse strong signals','One click on the label opens it'],['showMedium','Mark medium signals','Slightly dimmed, with a label'],['dmFilter','Filter direct messages','Hide scam and bot messages'],['dmBlockBots','Hide bots and scams','Crypto, add-me-on-Telegram, new accounts with links'],['dmBlockSellers','Hide sales pitches too','Turn off to receive offers']];
+  var c = load(), html = '<b style="font-size:16px">Botless</b><div style="color:#44584c;font-size:12px;margin:2px 0 8px">Signals, not proof. Runs on your device.</div>';
+  rows.forEach(function (r) { html += '<label style="display:flex;gap:8px;padding:6px 0;border-top:1px solid #d5ddcf;cursor:pointer"><input type="checkbox" data-k="' + r[0] + '" style="margin-top:3px"' + (c[r[0]] ? ' checked' : '') + '><span>' + r[1] + '<small style="display:block;color:#5a6d60">' + r[2] + '</small></span></label>'; });
+  html += '<div style="margin-top:8px"><b>Trusted accounts</b><small style="display:block;color:#5a6d60">One username per line</small><textarea data-k="trusted" style="width:100%;height:50px;box-sizing:border-box;margin-top:4px;border:1px solid #cdd7c8;border-radius:8px;padding:6px">' + c.trusted.join('\n') + '</textarea></div><button data-save style="margin-top:8px;width:100%;padding:9px;border:0;border-radius:999px;background:#e8693f;color:#10231a;font-weight:600;cursor:pointer">Save</button>';
+  box.innerHTML = html;
+  btn.onclick = function () { box.hidden = !box.hidden; };
+  box.querySelector('[data-save]').onclick = function () {
+    var n = load(); box.querySelectorAll('input[data-k]').forEach(function (i) { n[i.getAttribute('data-k')] = i.checked; });
+    n.trusted = box.querySelector('textarea').value.split('\n').map(function (s) { return s.replace(/^u\//, '').trim().toLowerCase(); }).filter(Boolean);
+    localStorage.setItem('botless:cfg', JSON.stringify(n)); window.dispatchEvent(new CustomEvent('botless-config', { detail: n })); box.hidden = true;
+  };
+  document.body.appendChild(btn); document.body.appendChild(box);
 })();

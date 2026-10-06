@@ -22,14 +22,16 @@ Everything runs in your browser. No tracking, no server, no accounts. See [PRIVA
 ### Firefox
 Open `about:debugging#/runtime/this-firefox`, click Load Temporary Add-on and choose `manifest.json`.
 
-### Safari
-Safari needs an Xcode wrapper. With Xcode installed run:
+### Safari (no Xcode needed): userscript
+Safari cannot load an extension folder, but it runs userscripts through a free app.
+1. Install **Userscripts** from the Mac App Store (free, open source) and enable it in Safari Settings, Extensions. Choose a folder for your scripts when it asks.
+2. Copy [`userscript/botless.user.js`](userscript/botless.user.js) into that folder.
+3. Open Reddit. A small **Botless** button appears at the bottom left. It opens the settings (turn on, collapse strong signals, direct message filter, hide bots and scams, **hide sales pitches too**, trusted accounts).
 
-```
-xcrun safari-web-extension-converter /path/to/botless
-```
+The userscript build has the same detection as the extension. It was tested against a mock inbox, not live Reddit.
 
-Build and run the generated app, then enable the extension in Safari Settings, Extensions. While developing you may need Develop, Allow Unsigned Extensions.
+### Safari as a full extension (needs Xcode)
+Install Xcode, then run `xcrun safari-web-extension-converter /path/to/botless`, build and run the generated app and enable it in Safari Settings, Extensions (during development also Develop, Allow Unsigned Extensions). Shipping it on the App Store needs an Apple developer account.
 
 ## How it decides
 
@@ -47,6 +49,7 @@ Comments: account age and karma (from Reddit's public `about.json`, cached for 7
 npm install
 npx playwright install chromium
 npm test
+npm run build   # regenerates userscript/botless.user.js
 ```
 
 The tests load the content script into a mock comment page and a mock inbox and check which items get labelled.

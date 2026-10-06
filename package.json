@@ -4,6 +4,6 @@
   "private": true,
   "description": "Browser extension: bot, scam and sales-pitch signals for Reddit comments and DMs.",
   "license": "MIT",
-  "scripts": { "test": "node tests/test.js && node tests/test2.js" },
+  "scripts": { "test": "node tests/test.js && node tests/test2.js && node tests/test3.js", "build": "node scripts/build-userscript.js" },
   "devDependencies": { "playwright": "^1.49.0" }
 }
