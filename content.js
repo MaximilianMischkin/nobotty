@@ -7,13 +7,26 @@
   var cache = {};              // name -> {t, created, karma, err}
   var queue = [], queued = {}; // fetch queue (1 request per ~1.1 s)
   var running = false, backoffUntil = 0;
-  var doFetch = function (u) {
+  /* Account lookup. In an extension the background script does the request (works around page CSP and Firefox
+     cross-compartment errors). As a userscript, or in tests, it falls back to a same-origin fetch. */
+  var rt = (typeof browser !== 'undefined' && browser.runtime && browser.runtime.id) ? browser.runtime
+         : (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) ? chrome.runtime : null;
+  function lookup(name) {
+    if (rt && !window.__NOBOTTY_FETCH) {
+      return Promise.resolve(rt.sendMessage({ type: 'nobotty-about', name: name })).then(function (r) {
+        if (!r) throw new Error('no answer from background');
+        if (r.error && !r.status) throw new Error(r.error);
+        return r;
+      });
+    }
     var f = window.__NOBOTTY_FETCH || window.fetch.bind(window);
     var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = ctl ? setTimeout(function () { ctl.abort(); }, 8000) : null;
-    var p = f(u, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: ctl ? ctl.signal : undefined });
-    return p.then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });
-  };
+    return f(location.origin + '/user/' + encodeURIComponent(name) + '/about.json?raw_json=1', { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { clearTimeout(timer); if (!r.ok) return { ok: false, status: r.status }; return r.json().then(function (data) { return { ok: true, status: r.status, data: data }; }); },
+            function (e) { clearTimeout(timer); throw e; });
+  }
+
 
   /* ---- storage with a tiny fallback so it can be tested outside an extension ---- */
   var hasChrome = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
@@ -91,11 +104,11 @@
     var wait = Math.max(0, backoffUntil - Date.now());
     setTimeout(function () {
       var name = queue.shift(); delete queued[name];
-      doFetch(location.origin + '/user/' + encodeURIComponent(name) + '/about.json?raw_json=1')
+      lookup(name)
         .then(function (r) {
           if (r.status === 429) { backoffUntil = Date.now() + 60000; queue.unshift(name); queued[name] = 1; throw new Error('rate'); }
-          if (!r.ok) { cache[name] = { t: Date.now(), err: r.status }; return null; }
-          return r.json();
+          if (!r.ok) { cache[name] = { t: Date.now(), err: r.status || r.error || 'failed' }; return null; }
+          return r.data;
         })
         .then(function (j) {
           if (j && j.data) cache[name] = { t: Date.now(), created: j.data.created_utc, karma: (j.data.total_karma != null ? j.data.total_karma : (j.data.link_karma || 0) + (j.data.comment_karma || 0)) };
