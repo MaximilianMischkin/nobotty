@@ -1,13 +1,17 @@
-/* Nobotty: a colour stripe on the comment host element (works with Reddit's shadow DOM).
-   red = low trust, orange = medium, green = good. */
-[data-nobotty]{position:relative}
-[data-nobotty="low"]{box-shadow:inset 3px 0 0 #e5484d}
-[data-nobotty="medium"]{box-shadow:inset 3px 0 0 #f0a030}
-[data-nobotty="good"]{box-shadow:inset 3px 0 0 #3fb26b}
+/* Nobotty: a soft colour stripe next to each checked comment (works with Reddit's shadow DOM).
+   red = low trust, orange = medium, green = good. The stripe covers only the comment itself. */
+[data-nobotty]{position:relative;--nb-c:transparent}
+[data-nobotty="low"]{--nb-c:#f0646b}
+[data-nobotty="medium"]{--nb-c:#f3b04e}
+[data-nobotty="good"]{--nb-c:#4fc08d}
+[data-nobotty]::after{content:"";position:absolute;left:-10px;top:3px;width:3px;height:calc(var(--nb-h, 100%) - 6px);border-radius:3px;background:var(--nb-c);opacity:.9;pointer-events:none}
+@keyframes nobotty-in{from{opacity:0;transform:scaleY(.5)}to{opacity:.9;transform:none}}
+@media (prefers-reduced-motion:no-preference){[data-nobotty]::after{transform-origin:top;animation:nobotty-in 260ms cubic-bezier(.23,1,.32,1)}}
 /* optional one-line collapse (low trust comments, or hidden direct messages) */
 [data-nobotty-collapse]:not([data-nobotty-open]),[data-nobotty-dm]:not([data-nobotty-open]){display:block;max-height:22px;overflow:hidden;opacity:.7}
+[data-nobotty-collapse]:not([data-nobotty-open])::after,[data-nobotty-dm]:not([data-nobotty-open])::after{height:16px}
 [data-nobotty-collapse]::before,[data-nobotty-dm]::before{
   content:attr(data-nobotty-label);display:block;font:500 12px/20px system-ui,-apple-system,sans-serif;
-  color:#e5484d;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-[data-nobotty-dm]{box-shadow:inset 3px 0 0 #e5484d}
-@media (prefers-reduced-motion:no-preference){[data-nobotty]{transition:opacity 160ms cubic-bezier(.23,1,.32,1)}}
+  color:#f0646b;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+[data-nobotty-dm]{--nb-c:#f0646b}
+[data-nobotty-dm]::after{content:"";position:absolute;left:-10px;top:3px;width:3px;height:16px;border-radius:3px;background:var(--nb-c);opacity:.9;pointer-events:none}

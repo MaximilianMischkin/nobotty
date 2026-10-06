@@ -305,15 +305,23 @@
       if (lv === 'neutral' || (lv === 'medium' && !cfg.showMedium) || (lv === 'good' && !cfg.showGood)) { clear(el); return; }
       if (lv === 'low') stats.low++; else if (lv === 'medium') stats.mid++; else stats.good++;
       el.setAttribute('data-nobotty', lv);
+      setOwnHeight(el);
       if (cfg.hoverReasons) el.setAttribute('title', 'Signals only, not proof: ' + (why.join(', ') || 'no warning signs')); else el.removeAttribute('title');
       if (lv === 'low' && cfg.collapseHigh) { el.setAttribute('data-nobotty-collapse', '1'); el.setAttribute('data-nobotty-label', 'Low trust · u/' + name); }
       else { el.removeAttribute('data-nobotty-collapse'); el.removeAttribute('data-nobotty-label'); el.removeAttribute('data-nobotty-open'); }
     });
     afterEval();
   }
+  /* The stripe should only cover the comment itself, not its whole reply tree. */
+  function setOwnHeight(el) {
+    var own = el.querySelector(':scope > [slot="actionRow"]') || el.querySelector(':scope > [slot="comment"]') || el.querySelector(':scope > .entry');
+    if (!own) { el.style.removeProperty('--nb-h'); return; }
+    var h = Math.round(own.getBoundingClientRect().bottom - el.getBoundingClientRect().top);
+    if (h > 0) el.style.setProperty('--nb-h', h + 'px'); else el.style.removeProperty('--nb-h');
+  }
   function afterEval() { drawChip(); try { console.log('[Nobotty]', JSON.stringify(stats)); } catch (e) {} }
   function clear(el) {
-    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); });
+    ['data-nobotty', 'data-nobotty-label', 'data-nobotty-open', 'data-nobotty-collapse', 'data-nobotty-dm'].forEach(function (a) { el.removeAttribute(a); }); el.style.removeProperty('--nb-h');
   }
   function schedule(ms) { if (pending) return; pending = true; setTimeout(function () { pending = false; evaluate(); }, typeof ms === 'number' ? ms : 400); }
 

@@ -1,5 +1,9 @@
 # Nobotty
 
+![Nobotty: before and after on a mock thread](docs/hero.png)
+
+*The screenshot uses a mock thread with fictional users.*
+
 **Spot likely bots, scams and sales pitches on Reddit.** Nobotty is a small browser extension that puts a label on comments from very new or low-karma accounts, hides scam and bot direct messages, and lets you choose whether sales pitches are hidden too. One click opens anything it collapsed.
 
 It gives signals, not proof. A new account can be a real person, so Nobotty only labels and collapses. It never deletes or blocks.
