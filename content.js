@@ -340,6 +340,19 @@
       var r0 = links[i].getBoundingClientRect();
       if (own(links[i]) && r0.width > 8 && r0.height > 4 && r0.height < 40) { nm = r0; break; }
     }
+    if (!nm) {
+      var au = (el.getAttribute('author') || '').toLowerCase();
+      if (au) {
+        var tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), t;
+        while ((t = tw.nextNode())) {
+          if (!t.parentElement || !own(t.parentElement)) continue;
+          if (t.nodeValue.trim().toLowerCase().replace(/^u\//, '') !== au) continue;
+          var rg = document.createRange(); rg.selectNodeContents(t);
+          var rr = rg.getBoundingClientRect();
+          if (rr.width > 8 && rr.height > 4 && rr.height < 40) { nm = rr; break; }
+        }
+      }
+    }
     if (!nm) return null;
     var row = nm.top + nm.height / 2, maxR = nm.right;
     var all = el.querySelectorAll('*');
@@ -357,8 +370,9 @@
     var he = headerEnd(el);
     if (he && he.x - host.left + 22 < host.width) { dx = he.x - host.left + 8; dy = he.y - host.top - 5; }
     else {
-      var av = findAvatar(el);
-      if (av) { dx = av.left - host.left - 16; dy = av.top - host.top + (av.height - 10) / 2; }
+      var av = findAvatar(el), au2 = (el.getAttribute('author') || '');
+      if (av && au2) { dx = av.right - host.left + 8 + au2.length * 8.4 + 78; dy = av.top - host.top + (av.height - 10) / 2 - 4; }
+      else if (av) { dx = av.left - host.left - 16; dy = av.top - host.top + (av.height - 10) / 2; }
     }
     el.style.setProperty('--nb-dx', Math.round(dx) + 'px'); el.style.setProperty('--nb-dy', Math.round(dy) + 'px');
   }
