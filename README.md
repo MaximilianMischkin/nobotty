@@ -1,21 +1,25 @@
 # Nobotty
 
-![Nobotty: before and after on a mock thread](docs/hero.png)
+![Nobotty demo: trust dots appear after each comment's time](docs/demo.gif)
 
-*The screenshot uses a mock thread with fictional users.*
+[Watch the demo in full quality (MP4, 14 s)](docs/demo.mp4)
 
-**Spot likely bots, scams and sales pitches on Reddit.** Nobotty is a small browser extension that puts a label on comments from very new or low-karma accounts, hides scam and bot direct messages, and lets you choose whether sales pitches are hidden too. One click opens anything it collapsed.
+![Nobotty: a Reddit thread with a trust dot after every comment](docs/hero.png)
 
-It gives signals, not proof. A new account can be a real person, so Nobotty only labels and collapses. It never deletes or blocks.
+*Video and screenshot use a mock thread with fictional users.*
+
+**Spot likely bots, scams and sales pitches on Reddit.** Nobotty is a small browser extension that puts a small coloured dot after every comment's time, hides scam and bot direct messages, and lets you choose whether sales pitches are hidden too.
+
+It gives signals, not proof. A new account can be a real person, so Nobotty only colours comments. It never hides, deletes or blocks them unless you turn on collapsing.
 
 Everything runs in your browser. No tracking, no server, no accounts. See [PRIVACY.md](PRIVACY.md).
 
 ## What it does
 
-- **A colour dot, no clutter.** Every checked account gets a small coloured dot at its avatar: **red** = low trust, **orange** = medium, **green** = good. No labels, no extra rows. Optional: a thin stripe instead of the dot, collapse red comments to one line, show the reason as a tooltip.
+- **A colour dot, no clutter.** Every checked comment gets a small coloured dot right after its time ("3h ago ●"): **red** = low trust, **orange** = medium, **green** = good. No labels, no extra rows. Optional: a thin stripe instead of the dot, collapse red comments to one line, show the reason as a tooltip.
 - **History check.** For suspicious accounts Nobotty also reads the account's last ~40 public posts and comments (locally, nothing is sent anywhere) and looks for bot patterns: shortened or link-hub URLs, the same link or text repeated, bursts of posts within minutes, spreading across many subreddits.
 - **Direct messages:** hides scam and bot messages (crypto, "add me on Telegram", new accounts that send links). Sales pitches ("I can build your website", SEO offers, free audits) have their own switch.
-- **Fast and polite:** four lookups in parallel, what you see first, and it spaces requests to stay inside Reddit's rate limit. Results are cached for 7 days.
+- **Fast and polite:** a whole thread is checked in 2 to 3 requests (the thread's account ids, then up to 100 accounts per request) instead of one per commenter. It follows Reddit's rate limit and pauses when Reddit asks it to. Results are cached for 7 days.
 - **Settings:** each colour can be turned off, collapse red comments, history check for every account, reasons on hover, DM filter and the sales-pitch switch, trusted accounts that are never marked.
 
 ## Install
