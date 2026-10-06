@@ -334,17 +334,20 @@
   /* The dot sits at the end of the header line ("name . 12h ago  (dot)"), away from the avatar:
      Reddit draws its own green "online" indicator there. Falls back to the left of the avatar. */
   function headerEnd(el) {
-    var name = findNameLink(el);
-    if (!name) { var m = el.querySelector(':scope > [slot="commentMeta"]'); if (!m) return null;
-      var mr = m.getBoundingClientRect(); if (mr.height < 8) return null;
-      name = { top: mr.top, height: Math.min(mr.height, 24), right: mr.left }; }
-    var row = name.top + name.height / 2, maxR = name.right;
-    var leaves = el.querySelectorAll(':scope > [slot="commentMeta"] *, :scope > [slot="commentMeta"], :scope > .entry .tagline *');
-    for (var i = 0; i < leaves.length; i++) {
-      var n = leaves[i]; if (n.children.length) continue;
+    var own = function (n) { return n.closest(el.localName) === el; };
+    var nm = null, links = el.querySelectorAll('a[href*="/user/"], a[href*="/u/"], a.author');
+    for (var i = 0; i < links.length; i++) {
+      var r0 = links[i].getBoundingClientRect();
+      if (own(links[i]) && r0.width > 8 && r0.height > 4 && r0.height < 40) { nm = r0; break; }
+    }
+    if (!nm) return null;
+    var row = nm.top + nm.height / 2, maxR = nm.right;
+    var all = el.querySelectorAll('*');
+    for (var j = 0; j < all.length; j++) {
+      var n = all[j]; if (n.children.length || !own(n)) continue;
       var r = n.getBoundingClientRect();
       if (r.width < 1 || r.height < 1 || r.height > 40 || r.width > 320) continue;
-      if (Math.abs(r.top + r.height / 2 - row) > 10) continue;
+      if (Math.abs(r.top + r.height / 2 - row) > 9 || r.left < nm.left - 2) continue;
       if (r.right > maxR) maxR = r.right;
     }
     return { x: maxR, y: row };
