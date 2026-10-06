@@ -278,7 +278,7 @@
     var txt;
     if (waiting || bad || stats.failed || paused) {
       txt = 'Nobotty' + (version ? ' ' + version : '') + ': ' + stats.checked + '/' + stats.withAuthor + ' checked, ' + (stats.low + stats.mid) + ' flagged'
-          + (waiting ? ', ' + waiting + ' waiting' : '') + (paused ? ', paused ' + fmtWait(paused) + ' (Reddit limit)' : '')
+          + (waiting ? ', ' + waiting + ' waiting' : '') + (paused ? ', paused ' + fmtWait(paused) + ' (Reddit limit)' : (waiting && limit.remaining !== null && limit.remaining <= 20 ? ', slowed by Reddit limit (' + limit.remaining + ' left, resets in ' + fmtWait(limit.reset || 60) + ')' : ''))
           + (bad ? ' [background: ' + bgState + ']' : '') + (stats.failed ? ' (' + stats.failed + ' lookups failed: ' + stats.lastErr + ')' : '');
       chip.style.opacity = '.85';
       if (paused && !tickTimer) tickTimer = setInterval(function () { if (backoffUntil <= Date.now()) { clearInterval(tickTimer); tickTimer = null; } drawChip(); }, 1000);
