@@ -3,7 +3,7 @@
   "name": "Nobotty: bot signals for Reddit",
   "short_name": "Nobotty",
   "version": "0.4.5",
-  "description": "Shows warning signals on likely bot and brand-new accounts in Reddit comments, and collapses them with one click to expand. Everything runs locally.",
+  "description": "Puts a small trust dot after every Reddit comment (red, orange, green) and hides bot and sales-pitch DMs. Everything runs locally.",
   "icons": {
     "16": "icons/16.png",
     "32": "icons/32.png",
