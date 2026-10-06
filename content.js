@@ -175,6 +175,15 @@
     limit = { remaining: rl.remaining, reset: rl.reset };
     if (rl.remaining <= 2) backoffUntil = Math.max(backoffUntil, Date.now() + Math.min(600, rl.reset || 30) * 1000);
   }
+  /* Watchdog: if jobs wait but nothing runs (timer chain broke, background was suspended), restart the pump. */
+  setInterval(function () {
+    if (!queue.length) return;
+    if (inflight > 0 && Date.now() - lastStart > 30000) inflight = 0;
+    if (inflight === 0 && !pumpTimer) pump();
+    else if (!pumpTimer && inflight < MAXC && Date.now() - lastStart > 5000) pump();
+    schedule(100);
+  }, 3000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { pump(); schedule(100); } });
   function pump() {
     if (inflight >= MAXC || !queue.length) return;
     var now = Date.now(), wait = Math.max(0, backoffUntil - now, lastStart + spacing() - now);

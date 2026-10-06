@@ -1,6 +1,6 @@
 {
   "name": "nobotty",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "description": "Browser extension: bot, scam and sales-pitch signals for Reddit comments and DMs.",
   "license": "MIT",
